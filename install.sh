@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # .Tech installer / установщик .Tech
 #
-#   ./install.sh             — обычная установка / normal install
-#   ./install.sh --dry-run   — ничего не менять, только показать шаги / change nothing, just show steps
+#   ./install.sh              — обычная установка / normal install
+#   ./install.sh --yes        — на все вопросы «да» / answer "yes" to every question
+#   ./install.sh --dry-run    — ничего не менять, только показать шаги / change nothing, just show steps
+#   ./install.sh --help
 #
 # Пакеты, которые проверяются, перечислены в массиве DEPS ниже — правь его под свои нужды.
 
@@ -12,8 +14,18 @@ REPO_URL="https://github.com/22miligrams-cmyk/.Tech.git"
 README_URL="https://github.com/22miligrams-cmyk/.Tech#readme"
 INSTALL_DIR="${TECH_DIR:-$HOME/.tech/shell}"
 CONF_NAME="tech"   # quickshell -c tech
+MIN_LUA_VER="0.55.0"   # с этой версии Hyprland конфиг на Lua / Lua config since this version
 DRY_RUN=0
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+ASSUME_YES=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)  DRY_RUN=1 ;;
+        -y|--yes)   ASSUME_YES=1 ;;
+        -h|--help)  sed -n '2,9p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Unknown option: $arg (try --help)"; exit 1 ;;
+    esac
+done
 
 # ── цвета ───────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -51,9 +63,10 @@ RU[root]="Не запускай установщик от root — он сам �
 RU[dry]="Режим --dry-run: ничего не будет изменено, команды только печатаются."
 RU[distro]="Дистрибутив: %s, пакетный менеджер: %s"
 RU[distro_unknown]="Не удалось определить пакетный менеджер — пакеты придётся ставить вручную."
+RU[hypr_ver]="Hyprland %s"
+RU[hypr_old]="Hyprland старше %s — там ещё нет Lua-конфига. Шелл работает и на старых версиях, но рекомендую обновиться."
 RU[checking]="Проверяю, чего не хватает…"
 RU[all_ok]="Все зависимости на месте."
-RU[missing_hdr]="Не найдено:"
 RU[missing_item]="  ✗ %s  (пакет: %s)"
 RU[manual_item]="  ✗ %s  — в репозиториях этого дистрибутива нет, нужно поставить вручную"
 RU[ask_install]="Установить недостающее из репозиториев?"
@@ -77,10 +90,18 @@ RU[link_exists]="~/.config/quickshell/%s уже существует и ведё
 RU[colors]="Создал стартовый файл цветов: %s"
 RU[ask_auto]="Добавить автозапуск в %s? (старый файл сохраню как .bak)"
 RU[auto_ok]="Автозапуск добавлен. Бэкап: %s"
-RU[auto_has]="В hyprland.conf уже есть запуск quickshell — не трогаю."
-RU[auto_noconf]="Не нашёл ~/.config/hypr/hyprland.conf. Добавь вручную строку: exec-once = quickshell -p %s"
+RU[auto_has]="В %s уже есть запуск quickshell — не трогаю."
+RU[auto_legacy]="Нашёл только старый hyprland.conf (hyprlang) — пропишу автозапуск там."
+RU[auto_noconf]="Не нашёл конфиг Hyprland. Добавь вручную в ~/.config/hypr/hyprland.lua:"
+RU[auto_noconf_old]="или, для старого формата, в ~/.config/hypr/hyprland.conf:"
+RU[ask_launch]="Запустить шелл прямо сейчас?"
+RU[ask_restart]="quickshell уже запущен. Перезапустить его?"
+RU[launch_ok]="Шелл запущен."
+RU[launch_fail]="Не получилось запустить шелл. Попробуй вручную: quickshell -p %s"
+RU[launch_nohypr]="Сейчас не запущен Hyprland (или нет доступа к его сессии) — запусти шелл после входа: quickshell -d -p %s"
+RU[launch_noqs]="quickshell не установлен — запускать нечего."
 RU[next]="Что дальше:"
-RU[next1]="  1. Перезайди в Hyprland (или выполни:  quickshell -d -p %s)"
+RU[next1]="  1. Если шелл ещё не запущен — перезайди в Hyprland (или выполни:  quickshell -d -p %s)"
 RU[next2]="  2. Если что-то не работает — сначала загляни в README: %s"
 RU[bye]="Готово! Удачи и приятного пользования ✨"
 
@@ -90,9 +111,10 @@ EN[root]="Don't run the installer as root — it will ask for sudo when needed."
 EN[dry]="--dry-run mode: nothing will be changed, commands are only printed."
 EN[distro]="Distro: %s, package manager: %s"
 EN[distro_unknown]="Could not detect a package manager — you'll have to install packages by hand."
+EN[hypr_ver]="Hyprland %s"
+EN[hypr_old]="Hyprland is older than %s — no Lua config there yet. The shell works on older versions too, but consider updating."
 EN[checking]="Checking what's missing…"
 EN[all_ok]="All dependencies are in place."
-EN[missing_hdr]="Not found:"
 EN[missing_item]="  ✗ %s  (package: %s)"
 EN[manual_item]="  ✗ %s  — not in this distro's repositories, install it manually"
 EN[ask_install]="Install the missing packages from the repositories?"
@@ -116,10 +138,18 @@ EN[link_exists]="~/.config/quickshell/%s already exists and points elsewhere —
 EN[colors]="Created a starter colors file: %s"
 EN[ask_auto]="Add autostart to %s? (the old file will be saved as .bak)"
 EN[auto_ok]="Autostart added. Backup: %s"
-EN[auto_has]="hyprland.conf already launches quickshell — leaving it alone."
-EN[auto_noconf]="Could not find ~/.config/hypr/hyprland.conf. Add this line manually: exec-once = quickshell -p %s"
+EN[auto_has]="%s already launches quickshell — leaving it alone."
+EN[auto_legacy]="Only the old hyprland.conf (hyprlang) was found — adding autostart there."
+EN[auto_noconf]="Could not find a Hyprland config. Add this manually to ~/.config/hypr/hyprland.lua:"
+EN[auto_noconf_old]="or, for the old format, to ~/.config/hypr/hyprland.conf:"
+EN[ask_launch]="Launch the shell right now?"
+EN[ask_restart]="quickshell is already running. Restart it?"
+EN[launch_ok]="Shell started."
+EN[launch_fail]="Could not start the shell. Try manually: quickshell -p %s"
+EN[launch_nohypr]="Hyprland isn't running (or its session isn't reachable) — start the shell after logging in: quickshell -d -p %s"
+EN[launch_noqs]="quickshell is not installed — nothing to launch."
 EN[next]="What's next:"
-EN[next1]="  1. Re-login to Hyprland (or run:  quickshell -d -p %s)"
+EN[next1]="  1. If the shell isn't running yet — re-login to Hyprland (or run:  quickshell -d -p %s)"
 EN[next2]="  2. If something doesn't work — check the README first: %s"
 EN[bye]="Done! Good luck and enjoy ✨"
 
@@ -142,9 +172,25 @@ run() {
 ask() {
     local f ans
     f="$(t "$1")"; shift
+    # shellcheck disable=SC2059
     printf "%s$f [Y/n] %s" "$C_B" "$@" "$C_RST"
+    if (( ASSUME_YES )); then echo "y"; return 0; fi
     read -r ans || { echo; return 1; }
     [[ -z "$ans" || "$ans" =~ ^([yYдД]|[yY][eE][sS]|[дД][аА])$ ]]
+}
+
+# ver_ge A B → 0 если версия A >= B
+ver_ge() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]; }
+
+hypr_version() {
+    local v=""
+    if command -v Hyprland >/dev/null 2>&1; then
+        v="$(Hyprland --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
+    fi
+    if [[ -z "$v" ]] && command -v hyprctl >/dev/null 2>&1; then
+        v="$(hyprctl version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
+    fi
+    printf '%s' "$v"
 }
 
 banner() {
@@ -172,15 +218,23 @@ if [[ $EUID -eq 0 ]]; then
 fi
 
 # ── 2. язык ─────────────────────────────────────────────────────────────
-while true; do
-    printf '%s\n  1) Русский\n  2) English\n> ' "$(t lang_prompt)"
-    read -r choice || exit 1
-    case "$choice" in
-        1) L="ru"; break ;;
-        2) L="en"; break ;;
-        *) say invalid ;;
-    esac
-done
+DEFAULT_CHOICE=2
+[[ "${LANG:-}" == ru* ]] && DEFAULT_CHOICE=1
+
+if (( ASSUME_YES )); then
+    (( DEFAULT_CHOICE == 1 )) && L="ru" || L="en"
+else
+    while true; do
+        printf '%s\n  1) Русский\n  2) English\n[%s]> ' "$(t lang_prompt)" "$DEFAULT_CHOICE"
+        read -r choice || exit 1
+        choice="${choice:-$DEFAULT_CHOICE}"
+        case "$choice" in
+            1) L="ru"; break ;;
+            2) L="en"; break ;;
+            *) say invalid ;;
+        esac
+    done
+fi
 echo
 (( DRY_RUN )) && warn dry
 
@@ -196,6 +250,13 @@ elif command -v zypper  >/dev/null 2>&1; then PM="zypper"; COL=4
 fi
 
 if [[ -n "$PM" ]]; then say distro "$DISTRO" "$PM"; else warn distro_unknown; fi
+
+# версия Hyprland (если уже стоит)
+HYPR_VER="$(hypr_version)"
+if [[ -n "$HYPR_VER" ]]; then
+    say hypr_ver "$HYPR_VER"
+    ver_ge "$HYPR_VER" "$MIN_LUA_VER" || warn hypr_old "$MIN_LUA_VER"
+fi
 
 install_pkgs() {
     case "$PM" in
@@ -228,7 +289,7 @@ for row in "${DEPS[@]}"; do
         fi
     fi
 done
-for m in "${MANUAL[@]}"; do
+for m in "${MANUAL[@]+"${MANUAL[@]}"}"; do
     printf '%s%s%s\n' "$C_WARN" "$(printf "$(t manual_item)" "$m")" "$C_RST"
 done
 
@@ -322,25 +383,73 @@ if [[ ! -e "$COLORS" ]]; then
     say colors "$COLORS"
 fi
 
-# ── 9. автозапуск в Hyprland ───────────────────────────────────────────
+# ── 9. автозапуск в Hyprland (Lua с 0.55, hyprlang — для старых версий) ──
 echo
-HCONF="$HOME/.config/hypr/hyprland.conf"
-if [[ ! -f "$HCONF" ]]; then
-    warn auto_noconf "$ROOT"
-elif grep -qE '^[[:space:]]*exec(-once)?[[:space:]]*=.*quickshell' "$HCONF"; then
-    say auto_has
-elif ask ask_auto "$HCONF"; then
-    BAK="$HCONF.bak-$(date +%Y%m%d-%H%M%S)"
-    run cp "$HCONF" "$BAK"
+HYPR_DIR="$HOME/.config/hypr"
+HLUA="$HYPR_DIR/hyprland.lua"
+HCONF="$HYPR_DIR/hyprland.conf"
+
+lua_block() {
+    printf '\n-- .Tech shell\nhl.on("hyprland.start", function()\n  hl.exec_cmd("quickshell -p '"'"'%s'"'"'")\nend)\n' "$ROOT"
+}
+conf_block() {
+    printf '\n# .Tech shell\nexec-once = quickshell -p '"'"'%s'"'"'\n' "$ROOT"
+}
+
+add_autostart() {   # add_autostart <файл> <lua|conf>
+    local file="$1" kind="$2" bak
+    bak="$file.bak-$(date +%Y%m%d-%H%M%S)"
+    run cp "$file" "$bak"
     if (( DRY_RUN )); then
-        printf '%s+ echo "exec-once = quickshell -p %s" >> %s%s\n' "$C_ACC" "$ROOT" "$HCONF" "$C_RST"
+        printf '%s+ append to %s:%s\n' "$C_ACC" "$file" "$C_RST"
+        if [[ $kind == lua ]]; then lua_block; else conf_block; fi
     else
-        printf '\n# .Tech shell\nexec-once = quickshell -p %s\n' "$ROOT" >> "$HCONF"
+        if [[ $kind == lua ]]; then lua_block >> "$file"; else conf_block >> "$file"; fi
     fi
-    ok auto_ok "$BAK"
+    ok auto_ok "$bak"
+}
+
+if [[ -f "$HLUA" ]]; then
+    TARGET="$HLUA"; KIND="lua"
+elif [[ -f "$HCONF" ]]; then
+    TARGET="$HCONF"; KIND="conf"
+    say auto_legacy
+else
+    TARGET=""; KIND=""
 fi
 
-# ── 10. финал ──────────────────────────────────────────────────────────
+if [[ -z "$TARGET" ]]; then
+    warn auto_noconf
+    printf '%s' "$C_ACC"; lua_block; printf '%s' "$C_RST"
+    warn auto_noconf_old
+    printf '%s' "$C_ACC"; conf_block; printf '%s' "$C_RST"
+elif grep -v '^[[:space:]]*\(--\|#\)' "$TARGET" | grep -q 'quickshell'; then
+    say auto_has "$TARGET"
+elif ask ask_auto "$TARGET"; then
+    add_autostart "$TARGET" "$KIND"
+fi
+
+# ── 10. запуск прямо сейчас ────────────────────────────────────────────
+echo
+if ! command -v quickshell >/dev/null 2>&1 && (( ! DRY_RUN )); then
+    warn launch_noqs
+elif [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -z "${WAYLAND_DISPLAY:-}" ]] && (( ! DRY_RUN )); then
+    warn launch_nohypr "$ROOT"
+elif ask ask_launch; then
+    GO=1
+    if pgrep -x quickshell >/dev/null 2>&1 && (( ! DRY_RUN )); then
+        if ask ask_restart; then
+            pkill -x quickshell; sleep 0.5
+        else
+            GO=0
+        fi
+    fi
+    if (( GO )); then
+        if run quickshell -d -p "$ROOT"; then ok launch_ok; else err launch_fail "$ROOT"; fi
+    fi
+fi
+
+# ── 11. финал ──────────────────────────────────────────────────────────
 echo
 printf '%s' "$C_B"; say next; printf '%s' "$C_RST"
 say next1 "$ROOT"

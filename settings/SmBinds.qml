@@ -12,6 +12,16 @@ Scope {
     readonly property string launchersDir: Quickshell.shellPath("launchers")
     readonly property string bdScript: Quickshell.shellPath("settings/qsbinds.py")
 
+    // IPC-префикс, который явно указывает, к какому шеллу обращаться. Без -p/-c «quickshell ipc»
+    // ищет конфиг «default» и не находит шелл, запущенный через «-c tech» (из-за этого бинды молчали)
+    readonly property string ipcPrefix: "quickshell ipc -p '" + Quickshell.shellPath("shell.qml") + "'"
+
+    // чинит старые сохранённые команды вида «quickshell ipc call shell X» / «quickshell ipc -c tech call shell X»
+    function fixCmd(cmd) {
+        return String(cmd || "").replace(/^quickshell ipc(\s+(-c|-p|--config|--path)\s+('[^']*'|\S+))?\s+call\s+shell\s/,
+                                         ipcPrefix + " call shell ")
+    }
+
     readonly property var bdDefs: [
         { id: "launcher", cmd: "sh -c \"quickshell ipc -p " + launchersDir + "/laun.qml call launcher toggle 2>/dev/null || QS_LAUNCHER_SHOW=1 quickshell -d -p " + launchersDir + "/laun.qml\"" },
         { id: "wall",     cmd: "sh -c \"quickshell ipc -p " + launchersDir + "/wall.qml call wall toggle 2>/dev/null || QS_WALL_SHOW=1 quickshell -d -p " + launchersDir + "/wall.qml\"" },
@@ -194,7 +204,7 @@ Scope {
         if (bdApplyProc.running) { bdApplyTimer.restart(); return }
         const binds = bdDefs.filter(d => menu.bdKeys[d.id]).map(d => d.var ? ({ key: menu.bdKeys[d.id], var: d.var }) : ({ key: menu.bdKeys[d.id], cmd: d.cmd }))
         for (const c of menu.bdCustom)
-            if (menu.bdKeys[c.id]) binds.push({ key: menu.bdKeys[c.id], cmd: c.cmd })
+            if (menu.bdKeys[c.id]) binds.push({ key: menu.bdKeys[c.id], cmd: root.fixCmd(c.cmd) })
         bdApplyProc.command = ["python3", bdScript, JSON.stringify({ enabled: menu.bdEnabled, mod: menu.bdMod, lang: menu.lang, binds: binds,
                                                                 alttab: { enabled: false } })]
         bdApplyProc.running = true

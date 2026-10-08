@@ -30,7 +30,7 @@ Item {
     }
 
     // команда quickshell ipc, которая открывает окно пресета
-    function presetCmd(p) { return menu.ipcPrefix + " call shell " + p }
+    function presetCmd(p) { return menu.bindsCtl.ipcPrefix + " call shell " + p }
 
     // открывает редактор: пустой для нового бинда или с данными существующего (по id)
     function openBindEditor(id) {
