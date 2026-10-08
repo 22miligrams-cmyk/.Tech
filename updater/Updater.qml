@@ -18,6 +18,9 @@
 //   quickshell ipc -p ~/.tech/shell call updater check     проверить прямо сейчас (ответ придёт уведомлением)
 //   quickshell ipc -p ~/.tech/shell call updater status    коротко вывести текущее состояние
 //   quickshell ipc -p ~/.tech/shell call updater apply     открыть терминал и запустить установщик
+//   quickshell ipc -p ~/.tech/shell call updater autoOn    включить автопроверку (по умолчанию включена)
+//   quickshell ipc -p ~/.tech/shell call updater autoOff   выключить автопроверку (ручной check работает всегда)
+//   quickshell ipc -p ~/.tech/shell call updater autoToggle  переключить
 
 import QtQuick
 import Quickshell
@@ -132,11 +135,13 @@ Item {
 
     // короткая строка состояния для `quickshell ipc -p ~/.tech/shell call updater status`
     function statusText() {
-        if (phase === "available") return "available: " + (localVersion || "?") + " -> " + remoteVersion
-        if (phase === "latest") return "latest: " + localVersion
-        if (phase === "checking") return "checking"
-        if (phase === "error") return "error: could not reach GitHub"
-        return "idle: " + (localVersion || "?")
+        let st
+        if (phase === "available") st = "available: " + (localVersion || "?") + " -> " + remoteVersion
+        else if (phase === "latest") st = "latest: " + localVersion
+        else if (phase === "checking") st = "checking"
+        else if (phase === "error") st = "error: could not reach GitHub"
+        else st = "idle: " + (localVersion || "?")
+        return st + " | " + autoText()
     }
 
     // ── уведомление ─────────────────────────────────────────────────────
@@ -175,7 +180,13 @@ Item {
     // ── настройки: изменить и сохранить ─────────────────────────────────
     function setAutoCheck(on) {
         autoCheck = on
+        // включили — не ждём 6 часов, проверяем сразу (если ещё не проверяли)
+        if (on && phase === "idle") check(false)
         save()
+    }
+
+    function autoText() {
+        return "auto-check: " + (autoCheck ? "on" : "off")
     }
 
     function setIntervalHours(h) {

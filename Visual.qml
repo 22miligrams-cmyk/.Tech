@@ -388,13 +388,16 @@ Item {
         function dnd(): void { settingsMenuComp.doNotDisturb = !settingsMenuComp.doNotDisturb }
     }
 
-    // управление обновлениями из терминала: quickshell ipc -p ~/.tech/shell call updater check|status|apply
+    // управление обновлениями из терминала: quickshell ipc -p ~/.tech/shell call updater check|status|apply|autoOn|autoOff|autoToggle
     IpcHandler {
         target: "updater"
 
         function check(): void { updaterComp.check(true) }
         function apply(): void { updaterComp.apply() }
         function status(): string { return updaterComp.statusText() }
+        function autoOn(): string { updaterComp.setAutoCheck(true); return updaterComp.autoText() }
+        function autoOff(): string { updaterComp.setAutoCheck(false); return updaterComp.autoText() }
+        function autoToggle(): string { updaterComp.setAutoCheck(!updaterComp.autoCheck); return updaterComp.autoText() }
     }
 
     Binding { target: visualRoot.notify; property: "wallpaper"; value: visualRoot.wallpaperPath }
