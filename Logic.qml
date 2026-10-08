@@ -7,10 +7,6 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Pipewire
-import "bar"
-import "panels"
-import "notifications"
-import "settings"
 import "common"
 
 Item {
@@ -88,15 +84,10 @@ Item {
                 if (json.accent) logic.colAccent = json.accent
                 if (json.text) logic.colText = json.text
                 if (json.secondary) logic.colSecondary = json.secondary
-            } catch (e) {}
+            } catch (e) {
+                console.warn("colors.json: не удалось разобрать:", e)
+            }
         }
-    }
-
-    Timer {
-        interval: 3000
-        running: true
-        repeat: true
-        onTriggered: colorFile.reload()
     }
 
     property real cpuPrevTotal: 0
@@ -151,7 +142,7 @@ Item {
     property int gpuAvail: -1
 
     property Process gpuCheck: Process {
-        command: ["sh", "-c", "command -v nvidia-smi >/dev/null 2>&1"]
+        command: ["sh", "-c", "command -v nvidia-smi >/dev/null 2>&1 || ls /sys/class/drm/card*/device/gpu_busy_percent >/dev/null 2>&1"]
         running: true
         onExited: (exitCode, exitStatus) => {
             logic.gpuAvail = exitCode === 0 ? 1 : 0
@@ -160,7 +151,7 @@ Item {
     }
 
     property Process gpuProc: Process {
-        command: ["bash", "-c", "exec stdbuf -oL nvidia-smi -i 0 --query-gpu=utilization.gpu --format=csv,noheader,nounits -l 1 2>/dev/null"]
+        command: ["bash", "-c", 'if command -v nvidia-smi >/dev/null 2>&1; then exec stdbuf -oL nvidia-smi -i 0 --query-gpu=utilization.gpu --format=csv,noheader,nounits -l 1 2>/dev/null; fi; f=$(ls /sys/class/drm/card*/device/gpu_busy_percent 2>/dev/null | head -n1); [ -n "$f" ] || exit 1; while :; do cat "$f"; sleep 1; done']
         running: false
         stdout: SplitParser {
             onRead: data => {
@@ -191,30 +182,25 @@ Item {
         }
     }
 
+    function applyLang(raw) {
+        const res = String(raw).trim()
+        logic.langVal = (res !== "" && res !== "N/A" && res !== "null")
+            ? res.substring(0, 2).toUpperCase()
+            : "EN"
+    }
+
+    // раскладка при старте; дальше её приносит событие activelayout
     property Process langProc: Process {
         command: ["bash", "-c", "hyprctl devices -j | jq -r '.keyboards[] | select(.main == true) | .active_keymap' 2>/dev/null || echo 'N/A'"]
         running: true
         stdout: SplitParser {
-            onRead: data => {
-                let res = data.trim()
-                if (res !== "" && res !== "N/A" && res !== "null") {
-                    logic.langVal = res.substring(0, 2).toUpperCase()
-                } else {
-                    logic.langVal = "EN"
-                }
-            }
+            onRead: data => logic.applyLang(data)
         }
-    }
-    Timer {
-        id: langDebounce
-        interval: 20
-        repeat: false
-        onTriggered: logic.langProc.running = true
     }
 
     // класс активного окна через hyprctl (один раз при старте), дальше ловим события hyprland
     property Process appNameProc: Process {
-        command: ["bash", "-c", "OUT=$(hyprctl activewindow -j 2>/dev/null | awk -F'\"' '/\"class\":/ {print $4; exit} /\"initialClass\":/ {print $4; exit}' | sed -E 's/.*\\.//'); echo \"${OUT:-~ desktop}\""]
+        command: ["bash", "-c", "OUT=$(hyprctl activewindow -j 2>/dev/null | jq -r '.class // .initialClass // empty'); echo \"${OUT:-~ desktop}\""]
         running: true
         stdout: SplitParser {
             onRead: data => logic.applyWindowClass(data)
@@ -239,7 +225,8 @@ Item {
             if (event.name === "activewindow") {
                 logic.applyWindowClass(event.data.split(",")[0])
             } else if (event.name === "activelayout") {
-                langDebounce.restart()
+                // data: "имя_клавиатуры,раскладка"
+                logic.applyLang(event.data.substring(event.data.lastIndexOf(",") + 1))
             }
         }
     }
