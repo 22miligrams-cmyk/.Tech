@@ -370,6 +370,8 @@ PanelWindow {
                         required property string summary
                         required property string body
                         required property string timeText
+                        required property string kind
+                        required property string actionText
 
                         readonly property bool isCurrent: index === center.currentIndex
                         readonly property int dist: Math.abs(index - center.currentIndex)
@@ -607,6 +609,38 @@ PanelWindow {
                                         wrapMode: Text.WordWrap
                                         maximumLineCount: 6
                                         elide: Text.ElideRight
+                                    }
+
+                                    // у карточки обновления — кнопка «Обновить»
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 30
+                                        visible: slot.kind === "update"
+                                        radius: 8
+                                        color: updArea.containsMouse ? center.colAccent : Qt.alpha(center.colBg, 0.5)
+
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: slot.actionText
+                                            color: updArea.containsMouse ? center.colBg : center.colText
+                                            font.bold: true
+                                            font.pixelSize: 12
+                                            font.family: center.fontFamily
+                                        }
+
+                                        MouseArea {
+                                            id: updArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                center.store.updateRequested();
+                                                slot.dismiss(0, false);
+                                                center.toggleMenu();   // центр перекрывает экран — закрываем, чтобы был виден терминал
+                                            }
+                                        }
                                     }
 
                                     Item { Layout.fillHeight: true }

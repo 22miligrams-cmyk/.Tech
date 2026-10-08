@@ -256,6 +256,16 @@ QtObject {
         "lrc.stage.save": "Сохраняю…",
         "win.dnd": "Не беспокоить",
         "notif.clear": "Очистить",
-        "notif.empty": "Нет непрочитанных уведомлений"
+        "notif.empty": "Нет непрочитанных уведомлений",
+        "upd.availTitle": "Йоу, есть апдейт!",
+        "upd.availBody": "Версия %1 → %2. Хочешь, установим?",
+        "upd.btnUpdate": "Обновить",
+        "upd.btnLater": "Позже",
+        "upd.latestTitle": ".Tech",
+        "upd.latestBody": "У тебя последняя версия: %1.",
+        "upd.errorTitle": ".Tech",
+        "upd.errorBody": "Не получилось проверить обновления. Есть ли интернет?",
+        "upd.pressEnter": "Enter — закрыть",
+        "upd.noTerminal": "Не нашёл терминал (kitty / foot / alacritty / xterm). Задай $TERMINAL или запусти install.sh руками."
     })
 }

@@ -66,6 +66,9 @@ Scope {
     // Сообщение прочитано в самом приложении -> убрать из центра
     signal sourceRead(int uid)
 
+    // Нажали «Обновить» на карточке обновления (Visual.qml ловит и запускает Updater.apply())
+    signal updateRequested()
+
 
     // Приложение закрыло уведомление само (прочитали в мессенджере).
     // Всплывашка, если ещё висит, уезжает; из истории убираем либо плавно (если центр открыт),
@@ -139,20 +142,24 @@ Scope {
 
     // Принимает готовое уведомление: кладёт в историю (всегда), а потом, если можно,
     // показывает всплывашкой и следит чтобы на экране было не больше maxVisible
-    function pushNotification(item) {
+    // force = true — системное уведомление (например, апдейт): пробивает «Не беспокоить»
+    function pushNotification(item, force) {
         // 1. история — сохраняем всегда
         historyModel.insert(0, {
             uid: item.uid,
             appName: item.appName,
             summary: item.summary,
             body: item.body,
+            kind: item.kind,
+            actionText: item.actionText,
             timeText: Qt.formatDateTime(new Date(), "dd.MM HH:mm")
         });
         while (historyModel.count > maxHistory)
             removeHistory(historyModel.get(historyModel.count - 1).uid);
 
         // 2. всплывашку не показываем если открыт центр или включён DND
-        if (centerOpen || doNotDisturb)
+        //    (force пробивает DND, но не открытый центр — он и так перекрывает экран)
+        if (centerOpen || (doNotDisturb && !force))
             return;
 
         // новая всегда сверху
@@ -171,6 +178,24 @@ Scope {
                 liveCount--;
             }
         }
+    }
+
+
+    // Своё уведомление шелла (не через D-Bus), всегда пробивает DND.
+    //   kind = "update" — карточка с кнопками «Обновить» / «Позже» и долгим таймаутом
+    //   kind = "info"   — обычная карточка
+    function pushSystem(title, body, kind, actionText, laterText) {
+        pushNotification({
+            uid: nextUid++,
+            appName: ".Tech",
+            summary: title || "",
+            body: body || "",
+            timeout: kind === "update" ? 30000 : 8000,
+            closing: false,
+            kind: kind || "info",
+            actionText: actionText || "",
+            laterText: laterText || ""
+        }, true);
     }
 
 
@@ -210,7 +235,10 @@ Scope {
                 summary: notification.summary || "",
                 body: notification.body || "",
                 timeout: timeout,
-                closing: false
+                closing: false,
+                kind: "normal",
+                actionText: "",
+                laterText: ""
             });
         }
     }
@@ -280,6 +308,9 @@ Scope {
                     required property string body
                     required property int timeout
                     required property bool closing
+                    required property string kind
+                    required property string actionText
+                    required property string laterText
 
                     readonly property Item card: cardRect    // нужно для расчёта области blur
                     readonly property int gap: 10
@@ -452,6 +483,68 @@ Scope {
                                         wrapMode: Text.WordWrap
                                         maximumLineCount: 4
                                         elide: Text.ElideRight
+                                    }
+                                }
+                            }
+
+                            // Кнопки у карточки обновления: «Обновить» запускает установщик, «Позже» просто прячет
+                            Row {
+                                width: parent.width
+                                spacing: 8
+                                visible: slotItem.kind === "update"
+
+                                Rectangle {
+                                    width: (parent.width - parent.spacing) / 2
+                                    height: 30
+                                    radius: notifRoot.cr
+                                    color: updMa.containsMouse ? notifRoot.colAccent : notifRoot.colSecondary
+
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: slotItem.actionText
+                                        color: updMa.containsMouse ? notifRoot.colSecondary : notifRoot.colText
+                                        font.bold: true
+                                        font.pixelSize: 11
+                                        font.family: notifRoot.fontFamily
+                                    }
+
+                                    MouseArea {
+                                        id: updMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            notifRoot.updateRequested();
+                                            notifRoot.removeHistory(slotItem.uid);
+                                            slotItem.dismiss();
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: (parent.width - parent.spacing) / 2
+                                    height: 30
+                                    radius: notifRoot.cr
+                                    color: laterMa.containsMouse ? Qt.alpha(notifRoot.colText, 0.12) : Qt.alpha(notifRoot.colText, 0.06)
+
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: slotItem.laterText
+                                        color: notifRoot.colText
+                                        font.pixelSize: 11
+                                        font.family: notifRoot.fontFamily
+                                    }
+
+                                    MouseArea {
+                                        id: laterMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: slotItem.dismiss()   // в центре уведомлений запись останется
                                     }
                                 }
                             }

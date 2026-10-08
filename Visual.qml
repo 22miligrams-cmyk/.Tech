@@ -18,6 +18,7 @@ import "notifications"
 import "bar"
 import "panels"
 import "settings"
+import "updater"
 import "common"
 import "icons"
 import "assets"
@@ -121,6 +122,18 @@ Item {
 
     DndSound {
         active: settingsMenuComp.doNotDisturb
+    }
+
+    // фоновая проверка обновлений .Tech (логика — в updater/Updater.qml)
+    Updater {
+        id: updaterComp
+        notify: visualRoot.notify
+    }
+
+    // кнопка «Обновить» на карточке уведомления -> терминал с установщиком
+    Connections {
+        target: visualRoot.notify
+        function onUpdateRequested() { updaterComp.apply() }
     }
 
     Binding {
@@ -373,6 +386,15 @@ Item {
             altTabComp.cycle(d)
         }
         function dnd(): void { settingsMenuComp.doNotDisturb = !settingsMenuComp.doNotDisturb }
+    }
+
+    // управление обновлениями из терминала: quickshell ipc -p ~/.tech/shell call updater check|status|apply
+    IpcHandler {
+        target: "updater"
+
+        function check(): void { updaterComp.check(true) }
+        function apply(): void { updaterComp.apply() }
+        function status(): string { return updaterComp.statusText() }
     }
 
     Binding { target: visualRoot.notify; property: "wallpaper"; value: visualRoot.wallpaperPath }

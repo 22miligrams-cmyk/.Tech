@@ -256,6 +256,16 @@ QtObject {
         "lrc.stage.save": "Saving…",
         "win.dnd": "Do not disturb",
         "notif.clear": "Clear",
-        "notif.empty": "No unread notifications"
+        "notif.empty": "No unread notifications",
+        "upd.availTitle": "Yo, there's an update!",
+        "upd.availBody": "Version %1 → %2. Want to install it?",
+        "upd.btnUpdate": "Update",
+        "upd.btnLater": "Later",
+        "upd.latestTitle": ".Tech",
+        "upd.latestBody": "You have the latest version: %1.",
+        "upd.errorTitle": ".Tech",
+        "upd.errorBody": "Could not check for updates. Is the internet up?",
+        "upd.pressEnter": "Press Enter to close",
+        "upd.noTerminal": "No terminal found (kitty / foot / alacritty / xterm). Set $TERMINAL or run install.sh by hand."
     })
 }
