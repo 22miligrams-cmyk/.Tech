@@ -7,10 +7,11 @@
 #   ./install.sh              — покажет список шагов, отметь нужные / pick the steps you want
 #   ./install.sh -y           — всё автоматически, без вопросов / fully automatic, no questions
 #   ./install.sh --dry-run    — ничего не менять, только показать шаги / change nothing, just show steps
+#   ./install.sh --auto-update / --no-auto-update — автопроверка обновлений вкл / выкл (без вопроса)
 #   ./install.sh --help
 #
 # Через curl | bash автоматический режим:  curl -fsSL <url> | bash -s -- -y
-# Запустил установщик повторно — он сравнит версию в ~/.tech/1.version с версией на GitHub
+# Запустил установщик повторно — он сравнит версию в ~/.tech/shell/v.version с версией на GitHub
 # и, если они не совпали, предложит снести всё и поставить заново (обновление).
 # Язык берётся из $LANG (принудительно: TECH_LANG=ru или TECH_LANG=en), папка установки — TECH_DIR.
 # Пакеты, которые проверяются, перечислены в массиве DEPS ниже — правь его под свои нужды.
@@ -19,11 +20,12 @@ set -uo pipefail
 
 REPO_URL="https://github.com/22miligrams-cmyk/.Tech.git"
 README_URL="https://github.com/22miligrams-cmyk/.Tech#readme"
-INSTALL_DIR="${TECH_DIR:-$HOME/.tech}"   # всегда ~/.tech, откуда бы ни запустили / always ~/.tech, wherever it is run from
-VERSION_FILE="1.version"   # файл с версией в корне репозитория / version file in the repo root
+INSTALL_DIR="${TECH_DIR:-$HOME/.tech/shell}"   # всегда ~/.tech/shell; остальное в ~/.tech не трогаем / always ~/.tech/shell; the rest of ~/.tech is left alone
+VERSION_FILE="v.version"   # файл с версией в корне репозитория / version file in the repo root
 CONF_NAME="tech"   # quickshell -c tech
 MIN_LUA_VER="0.55.0"   # с этой версии Hyprland конфиг на Lua / Lua config since this version
 DRY_RUN=0
+AUTO_UPD=""   # "", 1 или 0: автопроверка обновлений шелла (пусто — спросить; с -y — включить)
 ASSUME_YES=0   # по умолчанию — выбор шагов; -y = всё автоматически / default: pick steps; -y = automatic
 
 usage() {
@@ -33,6 +35,8 @@ usage() {
   ./install.sh            pick which steps to run / выбери нужные шаги
   ./install.sh -y         fully automatic, no questions / всё автоматически
   ./install.sh --dry-run  change nothing, only show steps / ничего не менять
+  ./install.sh --auto-update / --no-auto-update   update checks on / off, no question
+                          автопроверка обновлений вкл / выкл, без вопроса
   ./install.sh --help
 
   curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install.sh | bash
@@ -47,6 +51,8 @@ for arg in "$@"; do
         --dry-run)  DRY_RUN=1 ;;
         --ask|--interactive) ASSUME_YES=0 ;;
         -y|--yes)   ASSUME_YES=1 ;;
+        --auto-update)    AUTO_UPD=1 ;;
+        --no-auto-update) AUTO_UPD=0 ;;
         -h|--help)  usage; exit 0 ;;
         *) echo "Unknown option: $arg (try --help)"; exit 1 ;;
     esac
@@ -58,9 +64,9 @@ if (( ! ASSUME_YES )) && ! ( : </dev/tty ) 2>/dev/null; then ASSUME_YES=1; fi
 
 # ── цвета ───────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
-    C_RST=$'\e[0m'; C_B=$'\e[1m'; C_OK=$'\e[32m'; C_WARN=$'\e[33m'; C_ERR=$'\e[31m'; C_ACC=$'\e[38;2;163;206;241m'
+    C_RST=$'\e[0m'; C_B=$'\e[1m'; C_OK=$'\e[32m'; C_WARN=$'\e[33m'; C_ERR=$'\e[31m'; C_ACC=$'\e[38;2;163;206;241m'; C_DIM=$'\e[2m'
 else
-    C_RST=""; C_B=""; C_OK=""; C_WARN=""; C_ERR=""; C_ACC=""
+    C_RST=""; C_B=""; C_OK=""; C_WARN=""; C_ERR=""; C_ACC=""; C_DIM=""
 fi
 
 # ── зависимости: команда | arch | debian/ubuntu | fedora | opensuse ───────
@@ -76,6 +82,7 @@ DEPS=(
     "pavucontrol|pavucontrol|pavucontrol|pavucontrol|pavucontrol"
     "blueman-manager|blueman|blueman|blueman|blueman"
     "xdg-open|xdg-utils|xdg-utils|xdg-utils|xdg-utils"
+    "notify-send|libnotify|libnotify-bin|libnotify|libnotify-tools"
     "stdbuf|coreutils|coreutils|coreutils|coreutils"
     "curl|curl|curl|curl|curl"
     "tar|tar|tar|tar|tar"
@@ -101,7 +108,7 @@ RU[hypr_old]="Hyprland старше %s — там ещё нет Lua-конфиг
 RU[checking]="Проверяю, чего не хватает…"
 RU[all_ok]="Все зависимости на месте."
 RU[missing_item]="  ✗ %s  (пакет: %s)"
-RU[manual_item]="  ✗ %s  — в репозиториях этого дистрибутива нет, нужно поставить вручную"
+RU[manual_item]="  ! %s  — в репозиториях этого дистрибутива нет, нужно поставить вручную"
 RU[skip_install]="Пропускаю установку пакетов. Без них шелл может не запуститься."
 RU[installing]="Ставлю пакеты…"
 RU[install_fail]="Не все пакеты поставились — смотри ошибки выше."
@@ -116,8 +123,14 @@ RU[font_fail]="Не получилось поставить JetBrainsMono Nerd F
 RU[repo_using]="Использую текущую папку: %s"
 RU[repo_pull]="Репозиторий уже есть в %s — обновляю."
 RU[repo_clone]="Клонирую репозиторий в %s…"
-RU[repo_notgit]="Папка %s уже существует, но это не репозиторий .Tech. Переименуй её или задай другую: TECH_DIR=/путь ./install.sh"
-RU[ver_same]="Версия %s — это последняя, обновление не нужно."
+RU[repo_notgit]="Папка %s уже существует, но это не репозиторий .Tech (скорее всего, остаток от старой установки). Остальное в ~/.tech не трогаю."
+RU[ask_moveold]="Перенести её в бэкап и поставить заново?"
+RU[moveold_ok]="Старая папка перенесена в %s"
+RU[moveold_no]="Ок, ничего не трогаю. Освободи папку или задай другую: TECH_DIR=/путь ./install.sh"
+RU[ver_same]="У тебя последняя версия: %s."
+RU[ver_opt_exit]="  1) Выйти"
+RU[ver_opt_reinstall]="  2) Переустановить"
+RU[ver_choose]="Выбери 1 или 2 [1]: "
 RU[ver_diff]="Доступно обновление: у тебя версия %s, на GitHub — %s."
 RU[ver_unknown]="Не удалось узнать версию на GitHub (нет интернета или нет файла версии) — просто подтягиваю изменения."
 RU[ver_dirty]="Внимание: в %s есть твои локальные правки — они будут потеряны."
@@ -147,8 +160,14 @@ RU[launch_noqs]="quickshell не установлен — запускать н�
 RU[next]="Что дальше:"
 RU[next1]="  1. Если шелл ещё не запущен — перезайди в Hyprland (или выполни:  quickshell -d -p %s)"
 RU[next2]="  2. Если что-то не работает — сначала загляни в README: %s"
-RU[menu_title]="Что установить? (все пункты отмечены по умолчанию)"
-RU[menu_hint]="Номера через пробел — переключить, a — всё, n — ничего, Enter — поехали: "
+RU[menu_title]="Что установить?"
+RU[menu_hint]="↑↓ — двигаться · Пробел — вкл/выкл · a — всё · n — ничего · Enter — поехали"
+RU[dep_title]="Зависимости"
+RU[dep_summary]="Не хватает %s из %s."
+RU[dep_legend]="✓ есть   ✗ нет, поставлю   ! нет в репозитории, ставить вручную"
+RU[note_missing]="не хватает: %s"
+RU[note_ok]="всё на месте"
+RU[note_done]="уже на месте, пропускаю"
 RU[step_pkgs]="Недостающие пакеты (через менеджер пакетов, нужен sudo)"
 RU[step_font]="Шрифт JetBrainsMono Nerd Font (иконки)"
 RU[step_shaders]="Сборка шейдеров (qsb)"
@@ -158,6 +177,9 @@ RU[step_auto]="Автозапуск в конфиге Hyprland (бэкап со�
 RU[step_launch]="Запустить шелл сразу после установки"
 RU[running_skip]="quickshell уже запущен — не трогаю (запусти установщик без -y, если нужен перезапуск)."
 RU[scan_missing]="В QML вызываются программы, которых нет в системе (эвристика, проверь сам): %s"
+RU[ask_autoupd]="Проверять обновления .Tech автоматически (при старте шелла и раз в несколько часов)?"
+RU[autoupd_on]="Автопроверка обновлений включена. Выключить: quickshell ipc -p %s call updater autoOff"
+RU[autoupd_off]="Автопроверка обновлений выключена. Включить: quickshell ipc -p %s call updater autoOn"
 RU[bye]="Готово! Удачи и приятного пользования ✨"
 
 EN[lang_prompt]="Выбери язык / Choose language"
@@ -171,7 +193,7 @@ EN[hypr_old]="Hyprland is older than %s — no Lua config there yet. The shell w
 EN[checking]="Checking what's missing…"
 EN[all_ok]="All dependencies are in place."
 EN[missing_item]="  ✗ %s  (package: %s)"
-EN[manual_item]="  ✗ %s  — not in this distro's repositories, install it manually"
+EN[manual_item]="  ! %s  — not in this distro's repositories, install it manually"
 EN[skip_install]="Skipping package installation. The shell may not start without them."
 EN[installing]="Installing packages…"
 EN[install_fail]="Not every package installed — see the errors above."
@@ -186,8 +208,14 @@ EN[font_fail]="Could not install JetBrainsMono Nerd Font — icons in the shell 
 EN[repo_using]="Using the current folder: %s"
 EN[repo_pull]="Repository already exists in %s — updating."
 EN[repo_clone]="Cloning the repository into %s…"
-EN[repo_notgit]="Folder %s already exists but is not a .Tech repository. Rename it or pick another: TECH_DIR=/path ./install.sh"
-EN[ver_same]="Version %s is the latest, no update needed."
+EN[repo_notgit]="Folder %s already exists but is not a .Tech repository (probably a leftover of an old install). The rest of ~/.tech is left alone."
+EN[ask_moveold]="Move it to a backup and install fresh?"
+EN[moveold_ok]="Old folder moved to %s"
+EN[moveold_no]="OK, leaving it alone. Free up the folder or pick another: TECH_DIR=/path ./install.sh"
+EN[ver_same]="You have the latest version: %s."
+EN[ver_opt_exit]="  1) Exit"
+EN[ver_opt_reinstall]="  2) Reinstall"
+EN[ver_choose]="Choose 1 or 2 [1]: "
 EN[ver_diff]="Update available: you have version %s, GitHub has %s."
 EN[ver_unknown]="Could not read the version on GitHub (no internet or no version file) — just pulling changes."
 EN[ver_dirty]="Warning: %s has local changes — they will be lost."
@@ -217,8 +245,14 @@ EN[launch_noqs]="quickshell is not installed — nothing to launch."
 EN[next]="What's next:"
 EN[next1]="  1. If the shell isn't running yet — re-login to Hyprland (or run:  quickshell -d -p %s)"
 EN[next2]="  2. If something doesn't work — check the README first: %s"
-EN[menu_title]="What to install? (everything is selected by default)"
-EN[menu_hint]="Numbers separated by spaces — toggle, a — all, n — none, Enter — go: "
+EN[menu_title]="What to install?"
+EN[menu_hint]="↑↓ move · Space toggle · a all · n none · Enter go"
+EN[dep_title]="Dependencies"
+EN[dep_summary]="%s of %s are missing."
+EN[dep_legend]="✓ found   ✗ missing, will install   ! not in repos, install manually"
+EN[note_missing]="missing: %s"
+EN[note_ok]="all in place"
+EN[note_done]="already in place, skipping"
 EN[step_pkgs]="Missing packages (via the package manager, needs sudo)"
 EN[step_font]="JetBrainsMono Nerd Font (icons)"
 EN[step_shaders]="Build shaders (qsb)"
@@ -228,6 +262,9 @@ EN[step_auto]="Autostart in the Hyprland config (a backup is kept)"
 EN[step_launch]="Launch the shell right after installing"
 EN[running_skip]="quickshell is already running — leaving it alone (run the installer without -y to restart it)."
 EN[scan_missing]="The QML calls programs that are not installed (heuristic, double-check): %s"
+EN[ask_autoupd]="Check for .Tech updates automatically (on shell start and every few hours)?"
+EN[autoupd_on]="Automatic update checks are on. Turn off: quickshell ipc -p %s call updater autoOff"
+EN[autoupd_off]="Automatic update checks are off. Turn on: quickshell ipc -p %s call updater autoOn"
 EN[bye]="Done! Good luck and enjoy ✨"
 
 # ── помощники ───────────────────────────────────────────────────────────
@@ -243,6 +280,13 @@ run() {
         return 0
     fi
     "$@"
+}
+
+# установщик живёт отдельно и в ~/.tech/shell не нужен — не выкладываем install.sh в рабочую папку
+# (sparse-checkout: в git чисто, обновления не конфликтуют; нет поддержки — просто удаляем файл)
+strip_installer() {   # strip_installer <папка>
+    run git -C "$1" sparse-checkout set --no-cone '/*' '!/install.sh' >/dev/null 2>&1 \
+        || run rm -f -- "$1/install.sh"
 }
 
 # ask <ключ строки> [аргументы] → 0 если «да» (по умолчанию да)
@@ -273,34 +317,115 @@ hypr_version() {
 # ── выбор шагов ─────────────────────────────────────────────────────────
 STEPS=(pkgs font shaders link colors auto launch)
 declare -A SEL
+declare -A DONE   # шаги, которые уже сделаны — их пропускаем
 for _k in "${STEPS[@]}"; do SEL[$_k]=1; done
 
 want() { [[ "${SEL[$1]:-0}" == 1 ]]; }
 
-choose_steps() {
-    local ans tok n k
-    while true; do
-        printf '\n%s%s%s\n' "$C_B" "$(t menu_title)" "$C_RST"
-        n=1
-        for k in "${STEPS[@]}"; do
-            if want "$k"; then printf '  %d) [x] %s\n' "$n" "$(t "step_$k")"
-            else               printf '  %d) [ ] %s\n' "$n" "$(t "step_$k")"; fi
-            n=$((n + 1))
-        done
-        printf '%s' "$(t menu_hint)"
-        read -r ans </dev/tty || return 0
-        [[ -z "$ans" ]] && return 0
-        case "$ans" in
-            a|A|в|В) for k in "${STEPS[@]}"; do SEL[$k]=1; done ;;
-            n|N|н|Н) for k in "${STEPS[@]}"; do SEL[$k]=0; done ;;
-            *) for tok in $ans; do
-                   if [[ "$tok" =~ ^[0-9]+$ ]] && (( tok >= 1 && tok <= ${#STEPS[@]} )); then
-                       k="${STEPS[tok-1]}"
-                       if want "$k"; then SEL[$k]=0; else SEL[$k]=1; fi
-                   fi
-               done ;;
-        esac
+hr() { printf '%s━━ %s %s' "$C_B" "$1" "$C_ACC"; printf '━%.0s' $(seq 1 $(( 58 - ${#1} ))); printf '%s\n' "$C_RST"; }
+
+# пометка справа от пункта меню
+step_note() {
+    if [[ "$1" == pkgs ]] && (( HAVE_MISSING )); then
+        printf '%s(%s)%s' "$C_WARN" "$(printf "$(t note_missing)" "$DEP_MISS")" "$C_RST"
+    fi
+    return 0
+}
+
+# что уже сделано: такие шаги не выбираем и пропускаем
+detect_done() {
+    local q f
+    (( HAVE_MISSING )) || DONE[pkgs]=1
+    if command -v fc-list >/dev/null 2>&1 && fc-list 2>/dev/null | grep -qi 'JetBrainsMono Nerd'; then DONE[font]=1; fi
+    q="$HOME/.config/quickshell/$CONF_NAME"
+    if [[ -L "$q" && "$(readlink -f "$q")" == "$(readlink -f "$INSTALL_DIR")" ]]; then DONE[link]=1; fi
+    [[ -e "$HOME/.cache/quickshell/colors.json" ]] && DONE[colors]=1
+    for f in "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hypr/hyprland.conf"; do
+        if [[ -f "$f" ]] && grep -v '^[[:space:]]*\(--\|#\)' "$f" | grep -q 'quickshell'; then DONE[auto]=1; fi
     done
+    for k in "${!DONE[@]}"; do SEL[$k]=0; done
+}
+
+# читает одну клавишу с терминала → KEY=up|down|space|enter|esc|eof|<символ>
+read_key() {
+    local k rest
+    KEY=""
+    IFS= read -rsn1 k </dev/tty || { KEY=eof; return; }
+    if [[ $k == $'\e' ]]; then
+        rest=""
+        IFS= read -rsn2 -t 0.05 rest </dev/tty || true
+        case "$rest" in
+            '[A'|'OA') KEY=up ;;
+            '[B'|'OB') KEY=down ;;
+            *)         KEY=esc ;;
+        esac
+    elif [[ -z $k ]]; then KEY=enter
+    elif [[ $k == ' ' ]]; then KEY=space
+    else KEY="$k"
+    fi
+}
+
+# рисует пункты меню; курсор — CUR. Печатает ровно ${#STEPS[@]}+1 строк.
+render_menu() {
+    local i k ptr box
+    for i in "${!STEPS[@]}"; do
+        k="${STEPS[i]}"
+        printf '\r\e[2K'
+        if [[ -n "${DONE[$k]:-}" ]]; then
+            printf '    %s%d  %s✓%s%s  %s  (%s)%s\n' "$C_DIM" "$((i + 1))" "$C_OK" "$C_RST" "$C_DIM" "$(t "step_$k")" "$(t note_done)" "$C_RST"
+            continue
+        fi
+        if want "$k"; then box="${C_OK}[x]${C_RST}"; else box="${C_DIM}[ ]${C_RST}"; fi
+        if (( i == CUR )); then
+            printf '  %s❯%s %s%d%s %s %s%s%s  %s\n' "$C_ACC" "$C_RST" "$C_ACC" "$((i + 1))" "$C_RST" "$box" "$C_B" "$(t "step_$k")" "$C_RST" "$(step_note "$k")"
+        else
+            printf '    %s%d%s %s %s  %s\n' "$C_DIM" "$((i + 1))" "$C_RST" "$box" "$(t "step_$k")" "$(step_note "$k")"
+        fi
+    done
+    printf '\r\e[2K  %s%s%s\n' "$C_DIM" "$(t menu_hint)" "$C_RST"
+}
+
+# переместить курсор на следующий/предыдущий невыполненный пункт
+move_cur() {   # move_cur <+1|-1>
+    local i=$CUR n=${#STEPS[@]} c
+    for (( c = 0; c < n; c++ )); do
+        i=$(( (i + $1 + n) % n ))
+        if [[ -z "${DONE[${STEPS[i]}]:-}" ]]; then CUR=$i; return; fi
+    done
+}
+
+# выбор шагов стрелками: ↑↓ — двигаться, Пробел — вкл/выкл, Enter — поехали
+choose_steps() {
+    local k i total=$(( ${#STEPS[@]} + 1 )) active=0
+    CUR=0
+    for i in "${!STEPS[@]}"; do
+        if [[ -z "${DONE[${STEPS[i]}]:-}" ]]; then (( active == 0 )) && CUR=$i; active=1; fi
+    done
+    (( active )) || return 0     # всё уже сделано — выбирать нечего
+
+    echo; hr "$(t menu_title)"
+    printf '\e[?25l'            # прячем курсор терминала
+    trap 'printf "\e[?25h\n"; exit 130' INT
+    render_menu
+    while true; do
+        read_key
+        case "$KEY" in
+            up|k)    move_cur -1 ;;
+            down|j)  move_cur 1 ;;
+            space)   k="${STEPS[CUR]}"; if want "$k"; then SEL[$k]=0; else SEL[$k]=1; fi ;;
+            a|A)     for k in "${STEPS[@]}"; do [[ -z "${DONE[$k]:-}" ]] && SEL[$k]=1; done ;;
+            n|N)     for k in "${STEPS[@]}"; do SEL[$k]=0; done ;;
+            [1-9])   i=$(( KEY - 1 ))
+                     if (( i < ${#STEPS[@]} )) && [[ -z "${DONE[${STEPS[i]}]:-}" ]]; then
+                         CUR=$i; k="${STEPS[i]}"; if want "$k"; then SEL[$k]=0; else SEL[$k]=1; fi
+                     fi ;;
+            enter|eof) break ;;
+        esac
+        printf '\e[%dA' "$total"
+        render_menu
+    done
+    printf '\e[?25h'
+    trap - INT
 }
 
 # qsb в разных дистрибутивах называется по-разному (qsb, qsb-qt6) или лежит вне $PATH
@@ -380,6 +505,67 @@ fi
 echo
 (( DRY_RUN )) && warn dry
 
+# ── 2b. проверка версии — ДО выбора шагов ──────────────────────────────
+# Если установка уже есть, сразу сравниваем v.version с GitHub:
+#   совпали → «последняя версия» + 1 выйти / 2 переустановить
+#   не совпали → предлагаем обновиться
+if [[ -d "$INSTALL_DIR/.git" ]]; then
+    ROOT="$INSTALL_DIR"
+    LOCAL_VER="$(tr -d '[:space:]' < "$ROOT/$VERSION_FILE" 2>/dev/null)"
+    REMOTE_VER=""
+    if git -C "$ROOT" fetch -q --depth 1 origin 2>/dev/null; then
+        REMOTE_VER="$(git -C "$ROOT" show "FETCH_HEAD:$VERSION_FILE" 2>/dev/null | tr -d '[:space:]')"
+    fi
+
+    # снести установленную копию и поставить свежую
+    # сначала качаем новую копию рядом, и только потом сносим старую —
+    # если интернет пропал, старая установка остаётся целой
+    do_reinstall() {
+        if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+            warn ver_dirty "$ROOT"
+        fi
+        local NEW_DIR="$ROOT.new" REAL
+        run rm -rf -- "$NEW_DIR"
+        run git clone --depth 1 "$REPO_URL" "$NEW_DIR" || { err repo_fail; exit 1; }
+        strip_installer "$NEW_DIR"
+        REAL="$(readlink -f "$ROOT")"
+        if [[ -z "$REAL" || "$REAL" == "/" || "$REAL" == "$(readlink -f "$HOME")" || "$REAL" == "$(readlink -f "$HOME/.tech")" ]]; then
+            err wipe_refuse "$REAL"; exit 1
+        fi
+        run rm -rf -- "$REAL"
+        run mv -- "$NEW_DIR" "$ROOT"
+        ok reinstall_ok "${REMOTE_VER:-$LOCAL_VER}"
+    }
+
+    if [[ -z "$REMOTE_VER" ]]; then
+        warn ver_unknown
+        run git -C "$ROOT" pull --ff-only || true
+    elif [[ "$LOCAL_VER" == "$REMOTE_VER" ]]; then
+        # версии совпали: «You have the latest version» + 1 — выйти, 2 — переустановить
+        ok ver_same "$LOCAL_VER"
+        if (( ! ASSUME_YES )); then
+            while true; do
+                say ver_opt_exit
+                say ver_opt_reinstall
+                printf '%s%s%s' "$C_B" "$(t ver_choose)" "$C_RST"
+                read -r VER_ANS </dev/tty || { echo; exit 0; }
+                case "${VER_ANS:-1}" in
+                    1) exit 0 ;;
+                    2) do_reinstall; break ;;
+                    *) say invalid ;;
+                esac
+            done
+        fi
+    else
+        say ver_diff "${LOCAL_VER:-?}" "$REMOTE_VER"
+        if ask ask_reinstall; then
+            do_reinstall
+        else
+            warn ver_skip
+        fi
+    fi
+fi
+
 # ── 3. дистрибутив и менеджер пакетов ──────────────────────────────────
 DISTRO="unknown"
 [[ -r /etc/os-release ]] && DISTRO="$(. /etc/os-release; echo "${PRETTY_NAME:-${NAME:-unknown}}")"
@@ -409,37 +595,64 @@ install_pkgs() {
     esac
 }
 
-# ── 3b. выбор шагов (без -y и только если есть терминал) ───────────────
-(( ASSUME_YES )) || choose_steps
-
-# ── 4. что отсутствует ─────────────────────────────────────────────────
-echo; say checking
+# ── 3b. проверка зависимостей — ДО меню, чтобы было видно, что нужно ───
 declare -A SEEN
-PKGS=(); MANUAL=(); NEED_QS=0; HAVE_MISSING=0
+PKGS=(); MANUAL=(); GRID=(); MISS_LINES=(); NEED_QS=0; HAVE_MISSING=0; DEP_MISS=0
+DEP_TOTAL=${#DEPS[@]}
 
 for row in "${DEPS[@]}"; do
     IFS='|' read -r cmd c_arch c_deb c_fed c_suse <<<"$row"
-    have_cmd "$cmd" && continue
-    HAVE_MISSING=1
+    if have_cmd "$cmd"; then GRID+=("ok|$cmd"); continue; fi
+    HAVE_MISSING=1; DEP_MISS=$((DEP_MISS + 1))
     cols=("" "$c_arch" "$c_deb" "$c_fed" "$c_suse")
     pkg="${cols[$COL]:--}"
 
     if [[ "$cmd" == "quickshell" ]]; then NEED_QS=1; fi
     if [[ -z "$PM" || "$pkg" == "-" ]]; then
-        MANUAL+=("$cmd")
+        MANUAL+=("$cmd"); GRID+=("man|$cmd")
+        MISS_LINES+=("$C_WARN$(printf "$(t manual_item)" "$cmd")$C_RST")
     else
-        printf '%s%s%s\n' "$C_WARN" "$(printf "$(t missing_item)" "$cmd" "$pkg")" "$C_RST"
+        GRID+=("bad|$cmd")
+        MISS_LINES+=("$C_ERR$(printf "$(t missing_item)" "$cmd" "$pkg")$C_RST")
         if [[ "$cmd" != "quickshell" && -z "${SEEN[$pkg]:-}" ]]; then
             SEEN[$pkg]=1; PKGS+=("$pkg")
         fi
     fi
 done
-for m in "${MANUAL[@]+"${MANUAL[@]}"}"; do
-    printf '%s%s%s\n' "$C_WARN" "$(printf "$(t manual_item)" "$m")" "$C_RST"
-done
 
+show_deps() {
+    local i=0 item st name col icon line
+    echo; hr "$(t dep_title)"
+    for item in "${GRID[@]}"; do
+        st="${item%%|*}"; name="${item#*|}"
+        case "$st" in
+            ok)  col="$C_OK";   icon="✓" ;;
+            bad) col="$C_ERR";  icon="✗" ;;
+            *)   col="$C_WARN"; icon="!" ;;
+        esac
+        printf '  %s%s%s %-17s' "$col" "$icon" "$C_RST" "$name"
+        i=$((i + 1)); (( i % 3 == 0 )) && echo
+    done
+    (( i % 3 )) && echo
+    echo
+    if (( HAVE_MISSING )); then
+        for line in "${MISS_LINES[@]}"; do printf '%s\n' "$line"; done
+        echo
+        warn dep_summary "$DEP_MISS" "$DEP_TOTAL"
+        printf '%s  %s%s\n' "$C_DIM" "$(t dep_legend)" "$C_RST"
+    else
+        ok all_ok
+    fi
+}
+show_deps
+detect_done
+
+# ── 3c. выбор шагов (без -y и только если есть терминал) ───────────────
+(( ASSUME_YES )) || choose_steps
+
+# ── 4. установка недостающего ──────────────────────────────────────────
 if (( HAVE_MISSING == 0 )); then
-    ok all_ok
+    :
 elif [[ -n "$PM" ]]; then
     echo
     if want pkgs; then
@@ -510,49 +723,26 @@ fi
 
 # ── 5. репозиторий ─────────────────────────────────────────────────────
 echo
-# Всегда ставим в $INSTALL_DIR (~/.tech), независимо от того, откуда запущен скрипт.
+# Всегда ставим в $INSTALL_DIR (~/.tech/shell), независимо от того, откуда запущен скрипт.
 if [[ -d "$INSTALL_DIR/.git" ]]; then
-    ROOT="$INSTALL_DIR"
-    LOCAL_VER="$(tr -d '[:space:]' < "$ROOT/$VERSION_FILE" 2>/dev/null)"
-    REMOTE_VER=""
-    if git -C "$ROOT" fetch -q --depth 1 origin 2>/dev/null; then
-        REMOTE_VER="$(git -C "$ROOT" show "FETCH_HEAD:$VERSION_FILE" 2>/dev/null | tr -d '[:space:]')"
-    fi
-    if [[ -z "$REMOTE_VER" ]]; then
-        warn ver_unknown
-        run git -C "$ROOT" pull --ff-only || true
-    elif [[ "$LOCAL_VER" == "$REMOTE_VER" ]]; then
-        ok ver_same "$LOCAL_VER"
-    else
-        say ver_diff "${LOCAL_VER:-?}" "$REMOTE_VER"
-        if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
-            warn ver_dirty "$ROOT"
-        fi
-        if ask ask_reinstall; then
-            # сначала качаем новую копию рядом, и только потом сносим старую —
-            # если интернет пропал, старая установка остаётся целой
-            NEW_DIR="$ROOT.new"
-            run rm -rf -- "$NEW_DIR"
-            run git clone --depth 1 "$REPO_URL" "$NEW_DIR" || { err repo_fail; exit 1; }
-            REAL="$(readlink -f "$ROOT")"
-            if [[ -z "$REAL" || "$REAL" == "/" || "$REAL" == "$(readlink -f "$HOME")" ]]; then
-                err wipe_refuse "$REAL"; exit 1
-            fi
-            run rm -rf -- "$REAL"
-            run mv -- "$NEW_DIR" "$ROOT"
-            ok reinstall_ok "$REMOTE_VER"
-        else
-            warn ver_skip
-        fi
-    fi
-elif [[ -e "$INSTALL_DIR" && -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
-    err repo_notgit "$INSTALL_DIR"
-    exit 1
+    ROOT="$INSTALL_DIR"   # версия уже проверена в шаге 2b
 else
     ROOT="$INSTALL_DIR"
+    if [[ -e "$INSTALL_DIR" && -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
+        # папка занята чем-то посторонним (например, старой установкой в ~/.tech/shell)
+        warn repo_notgit "$INSTALL_DIR"
+        if ask ask_moveold; then
+            BACKUP="$INSTALL_DIR.bak-$(date +%Y%m%d-%H%M%S)"
+            run mv -- "$INSTALL_DIR" "$BACKUP" || exit 1
+            ok moveold_ok "$BACKUP"
+        else
+            err moveold_no; exit 1
+        fi
+    fi
     say repo_clone "$ROOT"
     run mkdir -p "$(dirname "$ROOT")"
     run git clone --depth 1 "$REPO_URL" "$ROOT" || { err repo_fail; exit 1; }
+    strip_installer "$ROOT"
 fi
 
 # ── 6. шейдеры (скомпилированные .qsb в git больше не хранятся) ─────────
@@ -580,6 +770,9 @@ echo
 QS_CONF="$HOME/.config/quickshell/$CONF_NAME"
 if [[ -L "$QS_CONF" && "$(readlink -f "$QS_CONF")" == "$(readlink -f "$ROOT")" ]]; then
     :
+elif [[ -L "$QS_CONF" && ! -e "$QS_CONF" ]] && want link; then
+    # битая ссылка (например, на старую папку) — пересоздаём
+    run ln -sfn "$ROOT" "$QS_CONF" && ok link_ok
 elif [[ -e "$QS_CONF" || -L "$QS_CONF" ]]; then
     warn link_exists "$CONF_NAME"
 elif want link; then
@@ -645,6 +838,38 @@ elif grep -v '^[[:space:]]*\(--\|#\)' "$TARGET" | grep -q 'quickshell'; then
     say auto_has "$TARGET"
 else
     add_autostart "$TARGET" "$KIND"
+fi
+
+# ── 9b. автопроверка обновлений (настройка шелла: ~/.cache/qs-updater/state.json) ──
+# Спрашиваем только если настройки ещё нет (первая установка) или её задали флагом.
+# Дальше переключать можно из шелла: quickshell ipc -p <папка> call updater autoOn|autoOff
+UPD_STATE="$HOME/.cache/qs-updater/state.json"
+if [[ -n "$AUTO_UPD" || ! -e "$UPD_STATE" ]]; then
+    echo
+    if [[ -z "$AUTO_UPD" ]]; then
+        if ask ask_autoupd; then AUTO_UPD=1; else AUTO_UPD=0; fi
+    fi
+    if (( DRY_RUN )); then
+        printf '%s+ write %s (autoCheck=%s)%s\n' "$C_ACC" "$UPD_STATE" "$AUTO_UPD" "$C_RST"
+    else
+        mkdir -p "$(dirname "$UPD_STATE")"
+        if [[ -s "$UPD_STATE" ]] && command -v python3 >/dev/null 2>&1; then
+            # файл уже есть — меняем только autoCheck, остальное (интервал и т.д.) не трогаем
+            python3 - "$UPD_STATE" "$AUTO_UPD" <<'PYJSON'
+import json, sys
+p, v = sys.argv[1], sys.argv[2] == "1"
+try:
+    d = json.load(open(p))
+except Exception:
+    d = {}
+d["autoCheck"] = v
+json.dump(d, open(p, "w"))
+PYJSON
+        else
+            if (( AUTO_UPD )); then printf '{"autoCheck":true}' > "$UPD_STATE"; else printf '{"autoCheck":false}' > "$UPD_STATE"; fi
+        fi
+    fi
+    if (( AUTO_UPD )); then say autoupd_on "$ROOT"; else say autoupd_off "$ROOT"; fi
 fi
 
 # ── 10. запуск прямо сейчас ────────────────────────────────────────────
