@@ -1,31 +1,60 @@
 #!/usr/bin/env bash
 # .Tech installer / установщик .Tech
 #
-#   ./install.sh              — обычная установка / normal install
-#   ./install.sh --yes        — на все вопросы «да» / answer "yes" to every question
+# Скачал один файл — дальше он сам / Download one file, it does the rest:
+#   curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install.sh | bash
+#
+#   ./install.sh              — покажет список шагов, отметь нужные / pick the steps you want
+#   ./install.sh -y           — всё автоматически, без вопросов / fully automatic, no questions
 #   ./install.sh --dry-run    — ничего не менять, только показать шаги / change nothing, just show steps
 #   ./install.sh --help
 #
+# Через curl | bash автоматический режим:  curl -fsSL <url> | bash -s -- -y
+# Запустил установщик повторно — он сравнит версию в ~/.tech/1.version с версией на GitHub
+# и, если они не совпали, предложит снести всё и поставить заново (обновление).
+# Язык берётся из $LANG (принудительно: TECH_LANG=ru или TECH_LANG=en), папка установки — TECH_DIR.
 # Пакеты, которые проверяются, перечислены в массиве DEPS ниже — правь его под свои нужды.
 
 set -uo pipefail
 
 REPO_URL="https://github.com/22miligrams-cmyk/.Tech.git"
 README_URL="https://github.com/22miligrams-cmyk/.Tech#readme"
-INSTALL_DIR="${TECH_DIR:-$HOME/.tech/shell}"
+INSTALL_DIR="${TECH_DIR:-$HOME/.tech}"   # всегда ~/.tech, откуда бы ни запустили / always ~/.tech, wherever it is run from
+VERSION_FILE="1.version"   # файл с версией в корне репозитория / version file in the repo root
 CONF_NAME="tech"   # quickshell -c tech
 MIN_LUA_VER="0.55.0"   # с этой версии Hyprland конфиг на Lua / Lua config since this version
 DRY_RUN=0
-ASSUME_YES=0
+ASSUME_YES=0   # по умолчанию — выбор шагов; -y = всё автоматически / default: pick steps; -y = automatic
+
+usage() {
+    cat <<'EOF'
+.Tech installer / установщик .Tech
+
+  ./install.sh            pick which steps to run / выбери нужные шаги
+  ./install.sh -y         fully automatic, no questions / всё автоматически
+  ./install.sh --dry-run  change nothing, only show steps / ничего не менять
+  ./install.sh --help
+
+  curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install.sh | bash -s -- -y
+
+Env: TECH_LANG=ru|en, TECH_DIR=<install dir>
+EOF
+}
 
 for arg in "$@"; do
     case "$arg" in
         --dry-run)  DRY_RUN=1 ;;
+        --ask|--interactive) ASSUME_YES=0 ;;
         -y|--yes)   ASSUME_YES=1 ;;
-        -h|--help)  sed -n '2,9p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)  usage; exit 0 ;;
         *) echo "Unknown option: $arg (try --help)"; exit 1 ;;
     esac
 done
+
+# вопросы читаем с терминала, а не из stdin (иначе при «curl | bash» скрипт съел бы сам себя);
+# нет терминала — просто отвечаем «да» на всё
+if (( ! ASSUME_YES )) && ! ( : </dev/tty ) 2>/dev/null; then ASSUME_YES=1; fi
 
 # ── цвета ───────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -48,6 +77,10 @@ DEPS=(
     "blueman-manager|blueman|blueman|blueman|blueman"
     "xdg-open|xdg-utils|xdg-utils|xdg-utils|xdg-utils"
     "stdbuf|coreutils|coreutils|coreutils|coreutils"
+    "curl|curl|curl|curl|curl"
+    "tar|tar|tar|tar|tar"
+    "xz|xz|xz-utils|xz|xz"
+    "fc-cache|fontconfig|fontconfig|fontconfig|fontconfig"
     "pipewire|pipewire|pipewire|pipewire|pipewire"
     "wpctl|wireplumber|wireplumber|wireplumber|wireplumber"
     "qsb|qt6-shadertools|qt6-shader-baker|qt6-qtshadertools|qt6-shadertools"
@@ -69,32 +102,43 @@ RU[checking]="Проверяю, чего не хватает…"
 RU[all_ok]="Все зависимости на месте."
 RU[missing_item]="  ✗ %s  (пакет: %s)"
 RU[manual_item]="  ✗ %s  — в репозиториях этого дистрибутива нет, нужно поставить вручную"
-RU[ask_install]="Установить недостающее из репозиториев?"
 RU[skip_install]="Пропускаю установку пакетов. Без них шелл может не запуститься."
 RU[installing]="Ставлю пакеты…"
 RU[install_fail]="Не все пакеты поставились — смотри ошибки выше."
 RU[qs_aur]="quickshell нет в основных репозиториях, пробую AUR (%s)…"
 RU[qs_manual]="quickshell не установлен. Инструкция: https://quickshell.org"
+RU[qs_copr]="quickshell нет в основных репозиториях, подключаю COPR errornr/quickshell…"
+RU[qs_try]="Пробую поставить quickshell из репозиториев…"
+RU[font_have]="Шрифт JetBrainsMono Nerd Font уже установлен."
+RU[font_get]="Скачиваю шрифт JetBrainsMono Nerd Font (для иконок)…"
+RU[font_ok]="Шрифт установлен в ~/.local/share/fonts."
+RU[font_fail]="Не получилось поставить JetBrainsMono Nerd Font — иконки в шелле могут отображаться квадратиками. Скачай вручную: https://www.nerdfonts.com/font-downloads"
 RU[repo_using]="Использую текущую папку: %s"
 RU[repo_pull]="Репозиторий уже есть в %s — обновляю."
 RU[repo_clone]="Клонирую репозиторий в %s…"
+RU[repo_notgit]="Папка %s уже существует, но это не репозиторий .Tech. Переименуй её или задай другую: TECH_DIR=/путь ./install.sh"
+RU[ver_same]="Версия %s — это последняя, обновление не нужно."
+RU[ver_diff]="Доступно обновление: у тебя версия %s, на GitHub — %s."
+RU[ver_unknown]="Не удалось узнать версию на GitHub (нет интернета или нет файла версии) — просто подтягиваю изменения."
+RU[ver_dirty]="Внимание: в %s есть твои локальные правки — они будут потеряны."
+RU[ask_reinstall]="Полностью снести установленную версию и поставить новую?"
+RU[ver_skip]="Остаюсь на текущей версии."
+RU[wipe_refuse]="Отказываюсь удалять %s — слишком опасный путь."
+RU[reinstall_ok]="Обновлено: поставлена версия %s."
 RU[repo_fail]="Не получилось получить репозиторий. Проверь интернет и права на папку."
 RU[shaders_build]="Собираю шейдеры (qsb)…"
 RU[shaders_none]="Исходников шейдеров (.frag/.vert) не найдено — пропускаю."
 RU[shaders_nosb]="qsb не найден — шейдеры не собраны (ставь qt6-shadertools)."
 RU[shaders_fail]="  ✗ не собрался: %s"
 RU[shaders_ok]="Шейдеров собрано: %s"
-RU[ask_link]="Сделать ссылку ~/.config/quickshell/%s → %s (чтобы работало «quickshell -c %s»)?"
 RU[link_ok]="Ссылка создана."
 RU[link_exists]="~/.config/quickshell/%s уже существует и ведёт не туда — не трогаю."
 RU[colors]="Создал стартовый файл цветов: %s"
-RU[ask_auto]="Добавить автозапуск в %s? (старый файл сохраню как .bak)"
 RU[auto_ok]="Автозапуск добавлен. Бэкап: %s"
 RU[auto_has]="В %s уже есть запуск quickshell — не трогаю."
 RU[auto_legacy]="Нашёл только старый hyprland.conf (hyprlang) — пропишу автозапуск там."
 RU[auto_noconf]="Не нашёл конфиг Hyprland. Добавь вручную в ~/.config/hypr/hyprland.lua:"
 RU[auto_noconf_old]="или, для старого формата, в ~/.config/hypr/hyprland.conf:"
-RU[ask_launch]="Запустить шелл прямо сейчас?"
 RU[ask_restart]="quickshell уже запущен. Перезапустить его?"
 RU[launch_ok]="Шелл запущен."
 RU[launch_fail]="Не получилось запустить шелл. Попробуй вручную: quickshell -p %s"
@@ -103,6 +147,17 @@ RU[launch_noqs]="quickshell не установлен — запускать н�
 RU[next]="Что дальше:"
 RU[next1]="  1. Если шелл ещё не запущен — перезайди в Hyprland (или выполни:  quickshell -d -p %s)"
 RU[next2]="  2. Если что-то не работает — сначала загляни в README: %s"
+RU[menu_title]="Что установить? (все пункты отмечены по умолчанию)"
+RU[menu_hint]="Номера через пробел — переключить, a — всё, n — ничего, Enter — поехали: "
+RU[step_pkgs]="Недостающие пакеты (через менеджер пакетов, нужен sudo)"
+RU[step_font]="Шрифт JetBrainsMono Nerd Font (иконки)"
+RU[step_shaders]="Сборка шейдеров (qsb)"
+RU[step_link]="Ссылка ~/.config/quickshell/tech (чтобы работало «quickshell -c tech»)"
+RU[step_colors]="Стартовый файл цветов"
+RU[step_auto]="Автозапуск в конфиге Hyprland (бэкап сохраню)"
+RU[step_launch]="Запустить шелл сразу после установки"
+RU[running_skip]="quickshell уже запущен — не трогаю (запусти установщик без -y, если нужен перезапуск)."
+RU[scan_missing]="В QML вызываются программы, которых нет в системе (эвристика, проверь сам): %s"
 RU[bye]="Готово! Удачи и приятного пользования ✨"
 
 EN[lang_prompt]="Выбери язык / Choose language"
@@ -117,32 +172,43 @@ EN[checking]="Checking what's missing…"
 EN[all_ok]="All dependencies are in place."
 EN[missing_item]="  ✗ %s  (package: %s)"
 EN[manual_item]="  ✗ %s  — not in this distro's repositories, install it manually"
-EN[ask_install]="Install the missing packages from the repositories?"
 EN[skip_install]="Skipping package installation. The shell may not start without them."
 EN[installing]="Installing packages…"
 EN[install_fail]="Not every package installed — see the errors above."
 EN[qs_aur]="quickshell is not in the main repos, trying AUR (%s)…"
 EN[qs_manual]="quickshell is not installed. Instructions: https://quickshell.org"
+EN[qs_copr]="quickshell is not in the main repos, enabling COPR errornr/quickshell…"
+EN[qs_try]="Trying to install quickshell from the repositories…"
+EN[font_have]="JetBrainsMono Nerd Font is already installed."
+EN[font_get]="Downloading JetBrainsMono Nerd Font (for icons)…"
+EN[font_ok]="Font installed to ~/.local/share/fonts."
+EN[font_fail]="Could not install JetBrainsMono Nerd Font — icons in the shell may show as boxes. Download it manually: https://www.nerdfonts.com/font-downloads"
 EN[repo_using]="Using the current folder: %s"
 EN[repo_pull]="Repository already exists in %s — updating."
 EN[repo_clone]="Cloning the repository into %s…"
+EN[repo_notgit]="Folder %s already exists but is not a .Tech repository. Rename it or pick another: TECH_DIR=/path ./install.sh"
+EN[ver_same]="Version %s is the latest, no update needed."
+EN[ver_diff]="Update available: you have version %s, GitHub has %s."
+EN[ver_unknown]="Could not read the version on GitHub (no internet or no version file) — just pulling changes."
+EN[ver_dirty]="Warning: %s has local changes — they will be lost."
+EN[ask_reinstall]="Completely remove the installed version and install the new one?"
+EN[ver_skip]="Staying on the current version."
+EN[wipe_refuse]="Refusing to delete %s — path is too dangerous."
+EN[reinstall_ok]="Updated: version %s installed."
 EN[repo_fail]="Could not get the repository. Check your internet and folder permissions."
 EN[shaders_build]="Building shaders (qsb)…"
 EN[shaders_none]="No shader sources (.frag/.vert) found — skipping."
 EN[shaders_nosb]="qsb not found — shaders not built (install qt6-shadertools)."
 EN[shaders_fail]="  ✗ failed to build: %s"
 EN[shaders_ok]="Shaders built: %s"
-EN[ask_link]="Create a link ~/.config/quickshell/%s → %s (so that \"quickshell -c %s\" works)?"
 EN[link_ok]="Link created."
 EN[link_exists]="~/.config/quickshell/%s already exists and points elsewhere — leaving it alone."
 EN[colors]="Created a starter colors file: %s"
-EN[ask_auto]="Add autostart to %s? (the old file will be saved as .bak)"
 EN[auto_ok]="Autostart added. Backup: %s"
 EN[auto_has]="%s already launches quickshell — leaving it alone."
 EN[auto_legacy]="Only the old hyprland.conf (hyprlang) was found — adding autostart there."
 EN[auto_noconf]="Could not find a Hyprland config. Add this manually to ~/.config/hypr/hyprland.lua:"
 EN[auto_noconf_old]="or, for the old format, to ~/.config/hypr/hyprland.conf:"
-EN[ask_launch]="Launch the shell right now?"
 EN[ask_restart]="quickshell is already running. Restart it?"
 EN[launch_ok]="Shell started."
 EN[launch_fail]="Could not start the shell. Try manually: quickshell -p %s"
@@ -151,6 +217,17 @@ EN[launch_noqs]="quickshell is not installed — nothing to launch."
 EN[next]="What's next:"
 EN[next1]="  1. If the shell isn't running yet — re-login to Hyprland (or run:  quickshell -d -p %s)"
 EN[next2]="  2. If something doesn't work — check the README first: %s"
+EN[menu_title]="What to install? (everything is selected by default)"
+EN[menu_hint]="Numbers separated by spaces — toggle, a — all, n — none, Enter — go: "
+EN[step_pkgs]="Missing packages (via the package manager, needs sudo)"
+EN[step_font]="JetBrainsMono Nerd Font (icons)"
+EN[step_shaders]="Build shaders (qsb)"
+EN[step_link]="Link ~/.config/quickshell/tech (so \"quickshell -c tech\" works)"
+EN[step_colors]="Starter colors file"
+EN[step_auto]="Autostart in the Hyprland config (a backup is kept)"
+EN[step_launch]="Launch the shell right after installing"
+EN[running_skip]="quickshell is already running — leaving it alone (run the installer without -y to restart it)."
+EN[scan_missing]="The QML calls programs that are not installed (heuristic, double-check): %s"
 EN[bye]="Done! Good luck and enjoy ✨"
 
 # ── помощники ───────────────────────────────────────────────────────────
@@ -175,7 +252,7 @@ ask() {
     # shellcheck disable=SC2059
     printf "%s$f [Y/n] %s" "$C_B" "$@" "$C_RST"
     if (( ASSUME_YES )); then echo "y"; return 0; fi
-    read -r ans || { echo; return 1; }
+    read -r ans </dev/tty || { echo; return 1; }
     [[ -z "$ans" || "$ans" =~ ^([yYдД]|[yY][eE][sS]|[дД][аА])$ ]]
 }
 
@@ -193,15 +270,78 @@ hypr_version() {
     printf '%s' "$v"
 }
 
+# ── выбор шагов ─────────────────────────────────────────────────────────
+STEPS=(pkgs font shaders link colors auto launch)
+declare -A SEL
+for _k in "${STEPS[@]}"; do SEL[$_k]=1; done
+
+want() { [[ "${SEL[$1]:-0}" == 1 ]]; }
+
+choose_steps() {
+    local ans tok n k
+    while true; do
+        printf '\n%s%s%s\n' "$C_B" "$(t menu_title)" "$C_RST"
+        n=1
+        for k in "${STEPS[@]}"; do
+            if want "$k"; then printf '  %d) [x] %s\n' "$n" "$(t "step_$k")"
+            else               printf '  %d) [ ] %s\n' "$n" "$(t "step_$k")"; fi
+            n=$((n + 1))
+        done
+        printf '%s' "$(t menu_hint)"
+        read -r ans </dev/tty || return 0
+        [[ -z "$ans" ]] && return 0
+        case "$ans" in
+            a|A|в|В) for k in "${STEPS[@]}"; do SEL[$k]=1; done ;;
+            n|N|н|Н) for k in "${STEPS[@]}"; do SEL[$k]=0; done ;;
+            *) for tok in $ans; do
+                   if [[ "$tok" =~ ^[0-9]+$ ]] && (( tok >= 1 && tok <= ${#STEPS[@]} )); then
+                       k="${STEPS[tok-1]}"
+                       if want "$k"; then SEL[$k]=0; else SEL[$k]=1; fi
+                   fi
+               done ;;
+        esac
+    done
+}
+
+# qsb в разных дистрибутивах называется по-разному (qsb, qsb-qt6) или лежит вне $PATH
+QSB=""
+find_qsb() {
+    local c
+    for c in qsb qsb-qt6 /usr/lib/qt6/bin/qsb /usr/lib64/qt6/bin/qsb /usr/lib/qt6/libexec/qsb; do
+        if command -v "$c" >/dev/null 2>&1; then QSB="$c"; return 0; fi
+    done
+    return 1
+}
+have_cmd() { if [[ "$1" == qsb ]]; then find_qsb; else command -v "$1" >/dev/null 2>&1; fi; }
+
+# программы, которые QML зовёт через command: [...] / execDetached([...]), но которых нет в системе
+scan_used_commands() {
+    [[ -d "$ROOT" ]] || return 0
+    local c; local -a miss=()
+    while read -r c; do
+        [[ -z "$c" ]] && continue
+        command -v "$c" >/dev/null 2>&1 || miss+=("$c")
+    done < <(grep -rhoE '(command:|execDetached\()[[:space:]]*\[[[:space:]]*"[A-Za-z0-9_.+-]+"' \
+                 --include='*.qml' "$ROOT" 2>/dev/null | grep -oE '"[^"]+"$' | tr -d '"' | sort -u)
+    (( ${#miss[@]} )) && warn scan_missing "${miss[*]}"
+    return 0
+}
+
 banner() {
     printf '%s' "$C_ACC"
     cat <<'EOF'
 
-        _____         _
-       |_   _|__  ___| |__
-         | |/ _ \/ __| '_ \
-    _    | |  __/ (__| | | |
-   (_)   |_|\___|\___|_| |_|
+      ___              ___              ___              ___     
+     /\  \            /\  \            /\  \            /\__\    
+     \:\  \          /::\  \          /::\  \          /:/  /    
+      \:\  \        /:/\:\  \        /:/\:\  \        /:/__/     
+      /::\  \      /::\~\:\  \      /:/  \:\  \      /::\  \ ___ 
+     /:/\:\__\    /:/\:\ \:\__\    /:/__/ \:\__\    /:/\:\  /\__\
+    /:/  \/__/    \:\~\:\ \/__/    \:\  \  \/__/    \/__\:\/:/  /
+   /:/  /          \:\ \:\__\       \:\  \               \::/  / 
+   \/__/            \:\ \/__/        \:\  \              /:/  /  
+                     \:\__\           \:\__\            /:/  /   
+                      \/__/            \/__/            \/__/    
 
         dotfiles for Hyprland
 
@@ -219,14 +359,16 @@ fi
 
 # ── 2. язык ─────────────────────────────────────────────────────────────
 DEFAULT_CHOICE=2
-[[ "${LANG:-}" == ru* ]] && DEFAULT_CHOICE=1
+SYS_LANG="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+[[ "$SYS_LANG" == ru* ]] && DEFAULT_CHOICE=1
+case "${TECH_LANG:-}" in ru) DEFAULT_CHOICE=1 ;; en) DEFAULT_CHOICE=2 ;; esac
 
-if (( ASSUME_YES )); then
+if (( ASSUME_YES )) || [[ -n "${TECH_LANG:-}" ]]; then
     (( DEFAULT_CHOICE == 1 )) && L="ru" || L="en"
 else
     while true; do
         printf '%s\n  1) Русский\n  2) English\n[%s]> ' "$(t lang_prompt)" "$DEFAULT_CHOICE"
-        read -r choice || exit 1
+        read -r choice </dev/tty || exit 1
         choice="${choice:-$DEFAULT_CHOICE}"
         case "$choice" in
             1) L="ru"; break ;;
@@ -267,6 +409,9 @@ install_pkgs() {
     esac
 }
 
+# ── 3b. выбор шагов (без -y и только если есть терминал) ───────────────
+(( ASSUME_YES )) || choose_steps
+
 # ── 4. что отсутствует ─────────────────────────────────────────────────
 echo; say checking
 declare -A SEEN
@@ -274,7 +419,7 @@ PKGS=(); MANUAL=(); NEED_QS=0; HAVE_MISSING=0
 
 for row in "${DEPS[@]}"; do
     IFS='|' read -r cmd c_arch c_deb c_fed c_suse <<<"$row"
-    command -v "$cmd" >/dev/null 2>&1 && continue
+    have_cmd "$cmd" && continue
     HAVE_MISSING=1
     cols=("" "$c_arch" "$c_deb" "$c_fed" "$c_suse")
     pkg="${cols[$COL]:--}"
@@ -297,7 +442,7 @@ if (( HAVE_MISSING == 0 )); then
     ok all_ok
 elif [[ -n "$PM" ]]; then
     echo
-    if ask ask_install; then
+    if want pkgs; then
         say installing
         FAIL=0
         (( ${#PKGS[@]} )) && { install_pkgs "${PKGS[@]}" || FAIL=1; }
@@ -315,6 +460,15 @@ elif [[ -n "$PM" ]]; then
                         warn qs_manual; FAIL=1
                     fi
                 fi
+            elif [[ "$PM" == "dnf" ]]; then
+                say qs_copr
+                run sudo dnf install -y dnf-plugins-core
+                if ! { run sudo dnf copr enable -y errornr/quickshell && run sudo dnf install -y quickshell; }; then
+                    warn qs_manual; FAIL=1
+                fi
+            elif [[ "$PM" == "zypper" ]]; then
+                say qs_try
+                run sudo zypper --non-interactive install quickshell || { warn qs_manual; FAIL=1; }
             else
                 warn qs_manual
             fi
@@ -327,16 +481,73 @@ else
     echo; warn skip_install
 fi
 
+# ── 4b. шрифт JetBrainsMono Nerd Font (иконки в баре и меню) ───────────
+echo
+if ! want font; then
+    :
+elif command -v fc-list >/dev/null 2>&1 && fc-list 2>/dev/null | grep -qi 'JetBrainsMono Nerd'; then
+    say font_have
+elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1 && command -v xz >/dev/null 2>&1; then
+    say font_get
+    FONT_DIR="$HOME/.local/share/fonts/JetBrainsMonoNerd"
+    FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz"
+    if (( DRY_RUN )); then
+        printf '%s+ download %s -> %s%s\n' "$C_ACC" "$FONT_URL" "$FONT_DIR" "$C_RST"
+    else
+        FONT_TMP="$(mktemp)"
+        if mkdir -p "$FONT_DIR" && curl -fsSL "$FONT_URL" -o "$FONT_TMP" \
+           && tar -xJf "$FONT_TMP" -C "$FONT_DIR" --wildcards '*.ttf'; then
+            command -v fc-cache >/dev/null 2>&1 && fc-cache -f "$FONT_DIR" >/dev/null 2>&1
+            ok font_ok
+        else
+            warn font_fail
+        fi
+        rm -f "$FONT_TMP"
+    fi
+else
+    warn font_fail
+fi
+
 # ── 5. репозиторий ─────────────────────────────────────────────────────
 echo
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
-if [[ -f "$SCRIPT_DIR/shell.qml" ]]; then
-    ROOT="$SCRIPT_DIR"
-    say repo_using "$ROOT"
-elif [[ -d "$INSTALL_DIR/.git" ]]; then
+# Всегда ставим в $INSTALL_DIR (~/.tech), независимо от того, откуда запущен скрипт.
+if [[ -d "$INSTALL_DIR/.git" ]]; then
     ROOT="$INSTALL_DIR"
-    say repo_pull "$ROOT"
-    run git -C "$ROOT" pull --ff-only || true
+    LOCAL_VER="$(tr -d '[:space:]' < "$ROOT/$VERSION_FILE" 2>/dev/null)"
+    REMOTE_VER=""
+    if git -C "$ROOT" fetch -q --depth 1 origin 2>/dev/null; then
+        REMOTE_VER="$(git -C "$ROOT" show "FETCH_HEAD:$VERSION_FILE" 2>/dev/null | tr -d '[:space:]')"
+    fi
+    if [[ -z "$REMOTE_VER" ]]; then
+        warn ver_unknown
+        run git -C "$ROOT" pull --ff-only || true
+    elif [[ "$LOCAL_VER" == "$REMOTE_VER" ]]; then
+        ok ver_same "$LOCAL_VER"
+    else
+        say ver_diff "${LOCAL_VER:-?}" "$REMOTE_VER"
+        if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+            warn ver_dirty "$ROOT"
+        fi
+        if ask ask_reinstall; then
+            # сначала качаем новую копию рядом, и только потом сносим старую —
+            # если интернет пропал, старая установка остаётся целой
+            NEW_DIR="$ROOT.new"
+            run rm -rf -- "$NEW_DIR"
+            run git clone --depth 1 "$REPO_URL" "$NEW_DIR" || { err repo_fail; exit 1; }
+            REAL="$(readlink -f "$ROOT")"
+            if [[ -z "$REAL" || "$REAL" == "/" || "$REAL" == "$(readlink -f "$HOME")" ]]; then
+                err wipe_refuse "$REAL"; exit 1
+            fi
+            run rm -rf -- "$REAL"
+            run mv -- "$NEW_DIR" "$ROOT"
+            ok reinstall_ok "$REMOTE_VER"
+        else
+            warn ver_skip
+        fi
+    fi
+elif [[ -e "$INSTALL_DIR" && -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
+    err repo_notgit "$INSTALL_DIR"
+    exit 1
 else
     ROOT="$INSTALL_DIR"
     say repo_clone "$ROOT"
@@ -345,19 +556,24 @@ else
 fi
 
 # ── 6. шейдеры (скомпилированные .qsb в git больше не хранятся) ─────────
-echo; say shaders_build
+build_shaders() {
+say shaders_build
 mapfile -t SHADERS < <(find "$ROOT" -type f \( -name '*.frag' -o -name '*.vert' \) -not -path '*/.git/*' 2>/dev/null)
 if (( ${#SHADERS[@]} == 0 )); then
     say shaders_none
-elif ! command -v qsb >/dev/null 2>&1 && (( ! DRY_RUN )); then
+elif ! find_qsb && (( ! DRY_RUN )); then
     warn shaders_nosb
 else
     built=0
     for f in "${SHADERS[@]}"; do
-        if run qsb --qt6 -o "$f.qsb" "$f"; then built=$((built + 1)); else say shaders_fail "$f"; fi
+        if run "${QSB:-qsb}" --qt6 -o "$f.qsb" "$f"; then built=$((built + 1)); else say shaders_fail "$f"; fi
     done
     ok shaders_ok "$built"
 fi
+}
+echo
+want shaders && build_shaders
+scan_used_commands
 
 # ── 7. ссылка для «quickshell -c tech» ─────────────────────────────────
 echo
@@ -366,14 +582,14 @@ if [[ -L "$QS_CONF" && "$(readlink -f "$QS_CONF")" == "$(readlink -f "$ROOT")" ]
     :
 elif [[ -e "$QS_CONF" || -L "$QS_CONF" ]]; then
     warn link_exists "$CONF_NAME"
-elif ask ask_link "$CONF_NAME" "$ROOT" "$CONF_NAME"; then
+elif want link; then
     run mkdir -p "$HOME/.config/quickshell"
     run ln -s "$ROOT" "$QS_CONF" && ok link_ok
 fi
 
 # ── 8. стартовые цвета (Logic.qml читает ~/.cache/quickshell/colors.json) ─
 COLORS="$HOME/.cache/quickshell/colors.json"
-if [[ ! -e "$COLORS" ]]; then
+if want colors && [[ ! -e "$COLORS" ]]; then
     run mkdir -p "$(dirname "$COLORS")"
     if (( DRY_RUN )); then
         printf '%s+ write %s%s\n' "$C_ACC" "$COLORS" "$C_RST"
@@ -418,27 +634,33 @@ else
     TARGET=""; KIND=""
 fi
 
-if [[ -z "$TARGET" ]]; then
+if ! want auto; then
+    :
+elif [[ -z "$TARGET" ]]; then
     warn auto_noconf
     printf '%s' "$C_ACC"; lua_block; printf '%s' "$C_RST"
     warn auto_noconf_old
     printf '%s' "$C_ACC"; conf_block; printf '%s' "$C_RST"
 elif grep -v '^[[:space:]]*\(--\|#\)' "$TARGET" | grep -q 'quickshell'; then
     say auto_has "$TARGET"
-elif ask ask_auto "$TARGET"; then
+else
     add_autostart "$TARGET" "$KIND"
 fi
 
 # ── 10. запуск прямо сейчас ────────────────────────────────────────────
 echo
-if ! command -v quickshell >/dev/null 2>&1 && (( ! DRY_RUN )); then
+if ! want launch; then
+    :
+elif ! command -v quickshell >/dev/null 2>&1 && (( ! DRY_RUN )); then
     warn launch_noqs
 elif [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -z "${WAYLAND_DISPLAY:-}" ]] && (( ! DRY_RUN )); then
     warn launch_nohypr "$ROOT"
-elif ask ask_launch; then
+else
     GO=1
     if pgrep -x quickshell >/dev/null 2>&1 && (( ! DRY_RUN )); then
-        if ask ask_restart; then
+        if (( ASSUME_YES )); then
+            warn running_skip; GO=0
+        elif ask ask_restart; then
             pkill -x quickshell; sleep 0.5
         else
             GO=0
