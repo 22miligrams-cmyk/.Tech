@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Auto LRC
+Name[ru]=Авто LRC
+Comment=Generate .lrc lyrics timings with whisper
+Comment[ru]=Автоматические тайминги для текста песни (.lrc)
+Exec=sh -c 'quickshell -n -p "$HOME/.tech/shell/lrc/LrcGen.qml"'
+Icon=audio-x-generic
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+Keywords=lrc;lyrics;karaoke;whisper;
+StartupNotify=false

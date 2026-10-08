@@ -1,0 +1,4 @@
+singleton Tr Tr.qml
+singleton LangState LangState.qml
+LangRu LangRu.qml
+LangEn LangEn.qml
