@@ -1,0 +1,2 @@
+# .Tech
+DotFiles for hyprland
