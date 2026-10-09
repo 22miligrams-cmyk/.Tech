@@ -486,68 +486,6 @@ Scope {
                                     }
                                 }
                             }
-
-                            // Кнопки у карточки обновления: «Обновить» запускает установщик, «Позже» просто прячет
-                            Row {
-                                width: parent.width
-                                spacing: 8
-                                visible: slotItem.kind === "update"
-
-                                Rectangle {
-                                    width: (parent.width - parent.spacing) / 2
-                                    height: 30
-                                    radius: notifRoot.cr
-                                    color: updMa.containsMouse ? notifRoot.colAccent : notifRoot.colSecondary
-
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: slotItem.actionText
-                                        color: updMa.containsMouse ? notifRoot.colSecondary : notifRoot.colText
-                                        font.bold: true
-                                        font.pixelSize: 11
-                                        font.family: notifRoot.fontFamily
-                                    }
-
-                                    MouseArea {
-                                        id: updMa
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            notifRoot.updateRequested();
-                                            notifRoot.removeHistory(slotItem.uid);
-                                            slotItem.dismiss();
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    width: (parent.width - parent.spacing) / 2
-                                    height: 30
-                                    radius: notifRoot.cr
-                                    color: laterMa.containsMouse ? Qt.alpha(notifRoot.colText, 0.12) : Qt.alpha(notifRoot.colText, 0.06)
-
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: slotItem.laterText
-                                        color: notifRoot.colText
-                                        font.pixelSize: 11
-                                        font.family: notifRoot.fontFamily
-                                    }
-
-                                    MouseArea {
-                                        id: laterMa
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: slotItem.dismiss()   // в центре уведомлений запись останется
-                                    }
-                                }
-                            }
                         }
                     }
 

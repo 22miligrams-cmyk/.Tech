@@ -270,7 +270,7 @@ QtObject {
         "notif.clear": "Clear",
         "notif.empty": "No unread notifications",
         "upd.availTitle": "Yo, there's an update!",
-        "upd.availBody": "Version %1 → %2. Want to install it?",
+        "upd.availBody": "Version %1 → %2. Update from Settings, on the About card.",
         "upd.btnUpdate": "Update",
         "upd.btnLater": "Later",
         "upd.latestTitle": ".Tech",

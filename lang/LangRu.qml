@@ -270,7 +270,7 @@ QtObject {
         "notif.clear": "Очистить",
         "notif.empty": "Нет непрочитанных уведомлений",
         "upd.availTitle": "Йоу, есть апдейт!",
-        "upd.availBody": "Версия %1 → %2. Хочешь, установим?",
+        "upd.availBody": "Версия %1 → %2. Обновиться можно в настройках, на карточке «О шелле».",
         "upd.btnUpdate": "Обновить",
         "upd.btnLater": "Позже",
         "upd.latestTitle": ".Tech",
