@@ -16,6 +16,11 @@
 <!-- Добавь скриншот: ![preview](assets/preview.png) -->
 
 ![preview](assets/Screens/preview.png)
+
+![preview](assets/Screens/settins.png)
+
+![preview](assets/Screens/wallpapers.png)
+
 ---
 
 ## Русский
