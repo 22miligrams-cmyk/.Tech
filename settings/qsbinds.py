@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# qsbinds.py - пишет бинды запуска лаунчеров Quickshell в hyprland.lua.
+# qsbinds.py - пишет бинды запуска лаунчеров Quickshell в конфиг Hyprland: hyprland.lua (0.55+)
+# или hyprland.conf (старые версии). Формат выбирается сам по файлу.
 # Вызывается из SettingsMenu.qml (вкладка «Бинды») с одним аргументом - json:
 #   qsbinds.py '{"enabled": true, "mod": "auto", "binds": [{"key": "D", "cmd": "..."}]}'
 # Скрипт сам дописывает в конец конфига управляемый блок между маркерами qs-binds и делает hyprctl reload,
@@ -7,7 +8,9 @@
 # иначе можно задать SUPER / ALT / CTRL / SHIFT или комбинацию через "+". Необязательное поле "alttab"
 # добавляет бинды переключателя окон. После записи проверяется, что Hyprland увидел все бинды,
 # нет ли конфликтов, а если конфиг после записи дал новые ошибки - файл откатывается назад.
-# Путь к конфигу берётся из $QS_HYPR_CONF (симлинки разворачиваются).
+# Путь к конфигу берётся из $QS_HYPR_CONF (симлинки разворачиваются). Если переменной нет, берётся
+# ~/.config/hypr/hyprland.lua, а если его нет, то ~/.config/hypr/hyprland.conf.
+# Для hyprland.conf блок выглядит так: «bind = SUPER, D, exec, команда» между строками «# >>> qs-binds».
 import json
 import os
 import re
@@ -15,16 +18,44 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import glob
 from collections import Counter
 
-HYPRLAND_CONF = os.environ.get("QS_HYPR_CONF", os.path.expanduser("~/.config/hypr/hyprland.lua"))
+# какой конфиг править: $QS_HYPR_CONF, иначе hyprland.lua (Hyprland 0.55+), иначе hyprland.conf (старые версии)
+def find_conf():
+    env = os.environ.get("QS_HYPR_CONF")
+    if env:
+        return env
+    base = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "hypr")
+    lua = os.path.join(base, "hyprland.lua")
+    conf = os.path.join(base, "hyprland.conf")
+    if os.path.isfile(lua):
+        return lua
+    return conf if os.path.isfile(conf) else lua
 
-BEGIN = "-- >>> qs-binds (генерируется настройками Quickshell, руками не править)"
-END = "-- <<< qs-binds"
-BLOCK_RE = re.compile(r"\n*-- >>> qs-binds[^\n]*\n.*?-- <<< qs-binds[^\n]*\n?", re.S)
+
+HYPRLAND_CONF = find_conf()
+FMT = "lua"   # "lua" или "conf"; выставляется в main() по файлу
+
+COMMENT = {"lua": "--", "conf": "#"}
+# маркеры блока в обоих форматах (старый блок убираем независимо от того, каким он был)
+BLOCK_RE = re.compile(r"\n*(?:--|#) >>> qs-binds[^\n]*\n.*?(?:--|#) <<< qs-binds[^\n]*\n?", re.S)
+
+
+def begin_mark():
+    return COMMENT[FMT] + " >>> qs-binds (генерируется настройками Quickshell, руками не править)"
+
+
+def end_mark():
+    return COMMENT[FMT] + " <<< qs-binds"
 
 USE_RE = re.compile(r"hl\.bind\(\s*([A-Za-z_]\w*)\s*\.\.")
 LIT_RE = re.compile(r'^(?:local\s+)?([A-Za-z_]\w*)\s*=\s*"([A-Za-z_ +]+)"', re.M)
+
+# hyprland.conf: переменные «$mainMod = SUPER» и использование «bind = $mainMod SHIFT, Q, ...»
+CONF_VAR_RE = re.compile(r"^\s*\$([A-Za-z_]\w*)\s*=\s*([^\n#]*)", re.M)
+CONF_USE_RE = re.compile(r"^\s*bind[a-z]*\s*=\s*\$([A-Za-z_]\w*)", re.M)
+CONF_SOURCE_RE = re.compile(r"^\s*source\s*=\s*([^\n#]+)", re.M)
 
 KEY_RE = re.compile(r"^(?:[A-Za-z0-9_]{1,32}|mouse:\d{3})$")
 MODS = ("SUPER", "ALT", "CTRL", "SHIFT")
@@ -45,7 +76,7 @@ MSG = {
         "err": "ошибка в конфиге Hyprland: ",
         "rollback": "конфиг возвращён к прежнему состоянию, ошибка: ",
         "sees": "Hyprland видит биндов: %d из %d",
-        "no_sees": "Hyprland НЕ видит биндов — проверь hyprland.lua",
+        "no_sees": "Hyprland НЕ видит биндов — проверь конфиг Hyprland (hyprland.lua или hyprland.conf)",
         "missing": "Hyprland не видит: %s",
         "conflict": "конфликт, комбинация занята дважды: %s",
         "auto_mod": "auto = %s",
@@ -61,7 +92,7 @@ MSG = {
         "err": "Hyprland config error: ",
         "rollback": "config restored to its previous state, error: ",
         "sees": "Hyprland sees binds: %d of %d",
-        "no_sees": "Hyprland does NOT see the binds — check hyprland.lua",
+        "no_sees": "Hyprland does NOT see the binds — check your Hyprland config (hyprland.lua or hyprland.conf)",
         "missing": "Hyprland does not see: %s",
         "conflict": "conflict, combination is bound twice: %s",
         "auto_mod": "auto = %s",
@@ -142,10 +173,16 @@ def mask_name(mask):
 # с верхнего уровня (и её значение, если оно строковый литерал), если не вышло - самую частую маску
 # среди биндов Hyprland. Возвращает (имя_переменной | None, значение | None)
 def detect_main_mod(content, binds_json):
-    declared = {n: v for n, v in LIT_RE.findall(content)}
-    top_level = lambda n: re.search(r"^(?:local\s+)?%s\s*=" % re.escape(n), content, re.M)
+    if FMT == "conf":
+        declared = {n: v.strip() for n, v in CONF_VAR_RE.findall(content)}
+        uses = CONF_USE_RE.findall(content)
+        top_level = lambda n: n in declared
+    else:
+        declared = {n: v for n, v in LIT_RE.findall(content)}
+        uses = USE_RE.findall(content)
+        top_level = lambda n: re.search(r"^(?:local\s+)?%s\s*=" % re.escape(n), content, re.M)
     name = value = None
-    for cand, _ in Counter(USE_RE.findall(content)).most_common():
+    for cand, _ in Counter(uses).most_common():
         if top_level(cand):
             name = cand
             if cand in declared and norm_mod_tokens(declared[cand]):
@@ -159,7 +196,27 @@ def detect_main_mod(content, binds_json):
     return name, value
 
 
-# собирает lua-строки для Alt+Tab (переключение вперёд, назад и подтверждение при отпускании модификатора)
+# экранирует команду для hyprland.conf: переводы строк в пробел, «#» удваивается (иначе это комментарий)
+def conf_str(s):
+    return str(s).replace("\r", " ").replace("\n", " ").replace("#", "##")
+
+
+# одна строка бинда.
+#   lua:  hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd("cmd"))
+#   conf: bind = SUPER SHIFT, D, exec, cmd
+# mods - модификаторы текстом («SUPER + SHIFT»); mods_var - имя переменной главного модификатора,
+# если бинд идёт через неё (в conf это «$mainMod»); action_is_var - action это имя переменной, а не команда
+def bind_line(mods, key, action, release=False, mods_var=None, action_is_var=False):
+    if FMT == "conf":
+        m = ("$" + mods_var) if mods_var else " ".join(norm_mod_tokens(mods) or [str(mods)])
+        act = ("$" + action) if action_is_var else conf_str(action)
+        return "%s = %s, %s, exec, %s" % ("bindr" if release else "bind", m, key, act)
+    keyexpr = ('%s .. " + %s"' % (mods_var, key)) if mods_var else lua_str("%s + %s" % (mods, key))
+    act = action if action_is_var else lua_str(action)
+    return "hl.bind(%s, hl.dsp.exec_cmd(%s)%s)" % (keyexpr, act, ", { release = true }" if release else "")
+
+
+# собирает строки для Alt+Tab (переключение вперёд, назад и подтверждение при отпускании модификатора)
 # и список комбинаций, которые потом надо проверить в Hyprland
 def alttab_lines(at, notes):
     mod = str(at.get("mod", "ALT")).upper()
@@ -170,12 +227,11 @@ def alttab_lines(at, notes):
         notes.append(T["at_bad"])
         return [], []
     out = [
-        "hl.bind(%s, hl.dsp.exec_cmd(%s))" % (lua_str(mod + " + " + key), lua_str(prefix + " call shell alttab")),
-        "hl.bind(%s, hl.dsp.exec_cmd(%s))" % (lua_str(mod + " + SHIFT + " + key), lua_str(prefix + " call shell alttabPrev")),
+        bind_line(mod, key, prefix + " call shell alttab"),
+        bind_line(mod + " + SHIFT", key, prefix + " call shell alttabPrev"),
     ]
     for rk in AT_RELEASE[mod]:
-        out.append("hl.bind(%s, hl.dsp.exec_cmd(%s), { release = true })"
-                   % (lua_str(mod + " + " + rk), lua_str(prefix + " call shell alttabCommit")))
+        out.append(bind_line(mod, rk, prefix + " call shell alttabCommit", release=True))
     m = MASKS[mod]
     exp = [(m, key.upper(), False, "%s + %s" % (mod, key)),
            (m | MASKS["SHIFT"], key.upper(), False, "%s + SHIFT + %s" % (mod, key))]
@@ -186,7 +242,7 @@ def alttab_lines(at, notes):
 # Возвращает текст блока и список ожидаемых комбинаций для проверки после reload
 def build_block(mod, binds, content, notes, alttab, main):
     name, value = main
-    lines = [BEGIN]
+    lines = [begin_mark()]
     expected = []
     for b in binds:
         key = str(b.get("key", "")).strip()
@@ -196,24 +252,28 @@ def build_block(mod, binds, content, notes, alttab, main):
             continue
         key = key if key.lower().startswith("mouse:") else key.upper()
         if action_var:
-            if not re.match(r"^[A-Za-z_]\w*$", action_var) or not re.search(
-                    r"^(?:local\s+)?%s\s*=" % re.escape(action_var), content, re.M):
-                notes.append(T["no_var"] % action_var)
+            if FMT == "conf":
+                var_ok = action_var in {n for n, _ in CONF_VAR_RE.findall(content)}
+            else:
+                var_ok = bool(re.search(r"^(?:local\s+)?%s\s*=" % re.escape(action_var), content, re.M))
+            if not re.match(r"^[A-Za-z_]\w*$", action_var) or not var_ok:
+                notes.append(T["no_var"] % (("$" if FMT == "conf" else "") + action_var))
                 continue
         elif not cmd:
             continue
 
         if mod == "auto" and name:
-            keyexpr = '%s .. " + %s"' % (name, key)
+            mods_var = name
+            mod_str = None
             mask = mask_of(value)
             label = "%s + %s" % (value or name, key)
         else:
+            mods_var = None
             mod_str = value if (mod == "auto" and value) else ("SUPER" if mod == "auto" else mod)
-            keyexpr = lua_str("%s + %s" % (mod_str, key))
             mask = mask_of(mod_str)
             label = "%s + %s" % (mod_str, key)
-        action = action_var if action_var else lua_str(cmd)
-        lines.append("hl.bind(%s, hl.dsp.exec_cmd(%s))" % (keyexpr, action))
+        lines.append(bind_line(mod_str, key, action_var if action_var else cmd,
+                               mods_var=mods_var, action_is_var=bool(action_var)))
         if mask is not None:
             expected.append((mask, key.upper(), False, label))
 
@@ -221,8 +281,38 @@ def build_block(mod, binds, content, notes, alttab, main):
         at_lines, at_exp = alttab_lines(alttab, notes)
         lines.extend(at_lines)
         expected.extend(at_exp)
-    lines.append(END)
+    lines.append(end_mark())
     return "\n".join(lines) + "\n", expected
+
+
+# для hyprland.conf: текст файлов, подключённых через «source = …» (до 3 уровней вложенности).
+# Нужен только чтобы найти там $mainMod и $fileManager; писать в них мы ничего не будем
+def sourced_text(path, depth=0, seen=None):
+    seen = seen if seen is not None else {os.path.realpath(path)}
+    if depth >= 3:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            src = f.read()
+    except OSError:
+        return ""
+    out = []
+    for raw in CONF_SOURCE_RE.findall(src):
+        pat = os.path.expanduser(raw.strip())
+        if not os.path.isabs(pat):
+            pat = os.path.join(os.path.dirname(path), pat)
+        for p in sorted(glob.glob(pat)):
+            rp = os.path.realpath(p)
+            if rp in seen or not os.path.isfile(rp):
+                continue
+            seen.add(rp)
+            try:
+                with open(rp, "r", encoding="utf-8") as f:
+                    out.append(f.read())
+            except OSError:
+                continue
+            out.append(sourced_text(rp, depth + 1, seen))
+    return "\n".join(out)
 
 
 # записывает файл через временный файл и os.replace, чтобы при сбое не остался обрубок
@@ -256,6 +346,8 @@ def main():
     path = os.path.realpath(HYPRLAND_CONF)
     if not os.path.isfile(path):
         sys.exit(T["no_file"] + HYPRLAND_CONF)
+    global FMT
+    FMT = "lua" if (HYPRLAND_CONF.lower().endswith(".lua") or path.lower().endswith(".lua")) else "conf"
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -270,11 +362,13 @@ def main():
     base = BLOCK_RE.sub("\n", content).rstrip("\n") + "\n"
     notes = []
     expected = []
-    main_mod = detect_main_mod(base, binds_before)
+    # для conf переменные могут лежать в подключённых через source файлах, ищем и там
+    scan = base + ("\n" + sourced_text(path) if FMT == "conf" else "")
+    main_mod = detect_main_mod(scan, binds_before)
     alttab = cfg.get("alttab") if isinstance(cfg.get("alttab"), dict) else {}
     if cfg.get("enabled") or alttab.get("enabled"):
         binds_in = cfg.get("binds", []) if cfg.get("enabled") else []
-        block, expected = build_block(mod, binds_in, base, notes, alttab, main_mod)
+        block, expected = build_block(mod, binds_in, scan, notes, alttab, main_mod)
         updated = base + "\n" + block
     else:
         updated = base
