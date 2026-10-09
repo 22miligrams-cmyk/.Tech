@@ -24,7 +24,7 @@
 
 ![preview](assets/Screens/preview.png)
 
-![preview](assets/Screens/setins.png)
+![preview](assets/Screens/setigns.png)
 
 ![preview](assets/Screens/wallpapers.png)
 
