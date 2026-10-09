@@ -5,6 +5,13 @@
 **Мой шелл для Hyprland на Quickshell**
 *My Hyprland desktop shell, built on Quickshell*
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/Screens/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/Screens/banner-light.svg">
+  <img alt=".Tech" src="assets/Screens/banner-light.svg">
+</picture>
+
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-a3cef1.svg)](LICENSE)
 [![Hyprland](https://img.shields.io/badge/Hyprland-0.55%2B-3d5a80.svg)](https://hypr.land)
 [![Quickshell](https://img.shields.io/badge/Quickshell-QML-181825.svg)](https://quickshell.org)
@@ -17,7 +24,7 @@
 
 ![preview](assets/Screens/preview.png)
 
-![preview](assets/Screens/setings.png)
+![preview](assets/Screens/settins.png)
 
 ![preview](assets/Screens/wallpapers.png)
 
@@ -29,7 +36,7 @@
 
 `.Tech` — рабочий стол для [Hyprland](https://hypr.land), целиком на QML и [Quickshell](https://quickshell.org). Панель, всплывающие окошки, лаунчеры, уведомления, настройки. Есть русский и английский.
 
-Я делаю его под себя и выкладываю как есть, так что углы местами шершавые. Нашёл баг или есть идея — заводи [issue](https://github.com/22miligrams-cmyk/.Tech/issues), или мне в тг @k2dein, мне важно.
+Я делаю его под себя и выкладываю как есть, так что углы местами шершавые. Нашёл баг или есть идея — заводи [issue](https://github.com/22miligrams-cmyk/.Tech/issues), мне важно.
 
 ### Что нужно, чтобы это завелось
 
@@ -227,7 +234,7 @@ rm -f ~/.config/quickshell/tech
 
 `.Tech` is a desktop shell for [Hyprland](https://hypr.land), written entirely in QML on [Quickshell](https://quickshell.org): bar, popup panels, launchers, notifications, settings. The UI comes in Russian and English.
 
-I build it for myself and share it as is, so some edges are rough. Found a bug or have an idea? Open an [issue](https://github.com/22miligrams-cmyk/.Tech/issues), or in telegram @k2dein.
+I build it for myself and share it as is, so some edges are rough. Found a bug or have an idea? Open an [issue](https://github.com/22miligrams-cmyk/.Tech/issues).
 
 ### What you need
 
