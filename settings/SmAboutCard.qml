@@ -19,8 +19,8 @@ Item {
 
     // ── ссылки: ПОМЕНЯЙ t.me-адреса на свои ─────────────────────────────
     readonly property var links: [
-        { glyph: "\uf2c6", label: "about.tgChannel", url: "https://t.me/CHANGE_ME_channel" },
-        { glyph: "\uf2c6", label: "about.tgMe",      url: "https://t.me/CHANGE_ME" },
+        { glyph: "\uf2c6", label: "about.tgChannel", url: "https://t.me/HyprlandTech" },
+        { glyph: "\uf2c6", label: "about.tgMe",      url: "https://t.me/K2dein" },
         { glyph: "\uf09b", label: "about.git",       url: "https://github.com/22miligrams-cmyk/.Tech" }
     ]
 
