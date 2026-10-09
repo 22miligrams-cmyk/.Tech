@@ -1,4 +1,5 @@
-// Главный экран настроек: карусель из трёх больших карточек разделов (бар, лаунчеры, бинды).
+// Главный экран настроек: карусель больших карточек. Первая — пассивная «О шелле» (версия, статус
+// обновления и ссылки видны сразу), дальше разделы: бар, лаунчеры, бинды.
 // Листается стрелками, колесом и мышью, Enter или клик по центральной карточке открывает раздел.
 import QtQuick
 import QtQuick.Layouts
@@ -96,10 +97,20 @@ ListView {
             Rectangle {
                 anchors.fill: parent
                 radius: 14
+                z: 2   // выше общей MouseArea: кнопки внутри «О шелле» ловят клики сами, остальное проваливается вниз
                 color: Qt.alpha(colSecondary, hubCard.isCurrent ? 0.9 : 0.4)
                 Behavior on color { ColorAnimation { duration: 150 } }
 
+                // пассивная карточка «О шелле»: показывает всё сама
+                SmAboutCard {
+                    anchors.fill: parent
+                    visible: hubItem.modelData.id === "about"
+                    menu: hubGrid.menu
+                    current: hubCard.isCurrent
+                }
+
                 ColumnLayout {
+                    visible: hubItem.modelData.id !== "about"
                     anchors.centerIn: parent
                     width: parent.width - 40
                     spacing: 16
@@ -108,7 +119,7 @@ ListView {
                         Layout.alignment: Qt.AlignHCenter
                         Layout.preferredWidth: 64
                         Layout.preferredHeight: 64
-                        name: hubItem.modelData.icon
+                        name: hubItem.modelData.icon ? hubItem.modelData.icon : ""
                         size: 64
                         color: colAccent
                     }
@@ -139,7 +150,8 @@ ListView {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    if (hubCard.isCurrent) menu.enterSection(hubItem.modelData.id)
+                    // «О шелле» по клику на пустое место ничего не запускает, кнопки у неё свои
+                    if (hubCard.isCurrent) { if (hubItem.modelData.id !== "about") menu.enterSection(hubItem.modelData.id) }
                     else hubGrid.currentIndex = hubItem.index
                 }
             }

@@ -338,6 +338,7 @@ Item {
 
     SettingsMenu {
         id: settingsMenuComp
+        updater: updaterComp
         barLayout: barLayout
         wallpaper: visualRoot.wallpaperPath
         onDoNotDisturbChanged: visualRoot.notify.doNotDisturb = doNotDisturb

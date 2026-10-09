@@ -1,5 +1,5 @@
-// Главное окно настроек на весь экран (оверлей). Внутри хаб с тремя разделами (бар, лаунчеры, бинды),
-// шапка, редактор бара и редактор биндов. Фон размывается через LiveBackdrop, меню слегка
+// Главное окно настроек на весь экран (оверлей). Внутри хаб: первой идёт пассивная карточка «О шелле»
+// (версия, обновление, ссылки), дальше разделы бар, лаунчеры, бинды; шапка, редактор бара и редактор биндов. Фон размывается через LiveBackdrop, меню слегка
 // двигается и наклоняется за мышкой (эффект камеры). Вся логика разложена по модулям Sm*,
 // здесь только общее состояние и навигация.
 import QtQuick
@@ -65,6 +65,9 @@ PanelWindow {
     }
 
     property bool doNotDisturb: false
+
+    // Updater из Visual.qml: из него карточка «О шелле» берёт версию и статус, а toggleMenu() дёргает тихую проверку
+    property var updater: null
 
     anchors { top: true; bottom: true; left: true; right: true }
     margins { top: 0; bottom: 0; left: 0; right: 0 }
@@ -143,6 +146,7 @@ PanelWindow {
     property string view: "hub"
 
     readonly property var hubModel: [
+        { id: "about",     glyph: "\uf05a" },   // всегда первая
         { id: "bar",       icon: "bar" },
         { id: "launchers", icon: "launchers" },
         { id: "binds",     icon: "binds" }
@@ -154,7 +158,20 @@ PanelWindow {
     readonly property real setDepthStep: 68
 
     // заходит из хаба в выбранный раздел и ставит фокус на первую карточку
+    // Enter / кнопка на карточке «О шелле»: есть новая версия — запустить установщик, иначе тихо перепроверить
+    function aboutAction() {
+        if (!updater) return
+        if (updater.updateAvailable) {
+            updater.apply()
+            toggleMenu()          // закрываем меню, чтобы был виден терминал
+        } else {
+            updater.check(false, true)
+        }
+    }
+
     function enterSection(id) {
+        // «О шелле» — пассивная карточка, отдельного раздела у неё нет
+        if (id === "about") { aboutAction(); return }
         tab = id
         if (id === "binds") hyprCtl.reloadHypr()
         view = "section"
@@ -164,7 +181,7 @@ PanelWindow {
     // возвращает в хаб, фокус на карточке раздела, из которого вышли
     function goHub() {
         view = "hub"
-        Qt.callLater(() => { hubGrid.currentIndex = Math.max(0, tabs.indexOf(tab)); hubGrid.forceActiveFocus() })
+        Qt.callLater(() => { hubGrid.currentIndex = Math.max(0, hubModel.findIndex(m => m.id === tab)); hubGrid.forceActiveFocus() })
     }
 
     // Esc: из раздела в хаб, из хаба закрыть меню
@@ -213,6 +230,8 @@ PanelWindow {
             visible = true
             tab = "bar"
             view = "hub"
+            // каждый раз при открытии настроек тихо сверяем версию с GitHub
+            if (updater) updater.refresh()
             backdropTimer.stop()
             if (backdropDelay > 0) {
                 backdropOn = false

@@ -62,6 +62,9 @@ Item {
 
     // true, если проверку запустил человек (тогда отвечаем уведомлением в любом случае)
     property bool manualRun: false
+    // true — «тихая» проверка (например, при открытии настроек): только обновляет состояние,
+    // карточку-уведомление не показывает. Результат виден в разделе «О шелле».
+    property bool quietRun: false
 
     readonly property string statePath: Paths.home + "/.cache/qs-updater/state.json"
 
@@ -96,12 +99,21 @@ Item {
 
     // ── проверка ────────────────────────────────────────────────────────
     // manual = true: ответить уведомлением в любом случае (и «всё свежее», и «ошибка»)
-    function check(manual) {
+    function check(manual, quiet) {
         if (checking) return
         manualRun = manual === true
+        quietRun = quiet === true
         phase = "checking"
         localFile.reload()
         fetchProc.running = true
+    }
+
+    // Тихая проверка при каждом открытии настроек. Работает даже при выключенной автопроверке
+    // (человек сам открыл меню). Чтобы не дёргать GitHub зря, чаще раза в 30 секунд не ходим.
+    function refresh() {
+        if (checking) return
+        if (Date.now() - lastCheck < 30000 && phase !== "idle") return
+        check(false, true)
     }
 
     // сюда приходит ответ с GitHub (или __ERR__, если curl не справился)
@@ -120,7 +132,7 @@ Item {
         if (isNewer(v, localVersion)) {
             phase = "available"
             // автоматическую проверку показываем один раз за запуск шелла, ручную — всегда
-            if (manualRun || v !== sessionNotified) {
+            if (!quietRun && (manualRun || v !== sessionNotified)) {
                 announce("update", tr("availTitle"), tr("availBody", localVersion || "?", v))
                 sessionNotified = v
                 lastNotified = v
