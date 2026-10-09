@@ -2,7 +2,8 @@
 
 # .Tech
 
-**Шелл-дотфайлы для Hyprland на Quickshell**
+**Мой шелл для Hyprland на Quickshell**
+*My Hyprland desktop shell, built on Quickshell*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-a3cef1.svg)](LICENSE)
 [![Hyprland](https://img.shields.io/badge/Hyprland-0.55%2B-3d5a80.svg)](https://hypr.land)
@@ -12,72 +13,135 @@
 
 </div>
 
-<!-- Добавь сюда скриншот: ![preview](assets/preview.png) -->
+<!-- Добавь скриншот: ![preview](assets/preview.png) -->
 
+![preview](assets/Screens/preview.png)
 ---
 
 ## Русский
 
 ### Что это
 
-`.Tech` — набор дотфайлов для [Hyprland](https://hypr.land): панель, всплывающие панели, лаунчеры, уведомления и настройки, написанные на QML под [Quickshell](https://quickshell.org). Есть русский и английский интерфейс.
+`.Tech` — рабочий стол для [Hyprland](https://hypr.land), целиком на QML и [Quickshell](https://quickshell.org). Панель, всплывающие окошки, лаунчеры, уведомления, настройки. Есть русский и английский.
 
-### Требования
+Я делаю его под себя и выкладываю как есть, так что углы местами шершавые. Нашёл баг или есть идея — заводи [issue](https://github.com/22miligrams-cmyk/.Tech/issues), мне важно.
 
-- **Hyprland 0.55 или новее** — с этой версии конфиг пишется на Lua (`hyprland.lua`). Старый формат `hyprland.conf` (hyprlang) в 0.55 ещё работает, но объявлен устаревшим; установщик понимает оба.
+### Что нужно, чтобы это завелось
+
+- **Hyprland 0.55+** (с этой версии конфиг на Lua, `hyprland.lua`; старый `hyprland.conf` тоже работает)
 - **Quickshell**
-- Wayland-сессия и PipeWire
+- Wayland и PipeWire
 
-Остальные зависимости установщик проверит и предложит поставить сам:
-
-| Команда | Зачем |
-|---|---|
-| `git` | получение и обновление репозитория |
-| `quickshell` | сам шелл |
-| `hyprctl` (`hyprland`) | общение с композитором |
-| `jq`, `python3` | вспомогательные скрипты |
-| `pipewire`, `wpctl` (`wireplumber`), `pavucontrol` | звук |
-| `blueman-manager` | Bluetooth |
-| `xdg-open` (`xdg-utils`) | открытие ссылок и файлов |
-| `qsb` (`qt6-shadertools`) | сборка шейдеров |
+Остальное установщик проверит сам и предложит доставить: `git`, `curl`, `jq`, `python3`, `wireplumber`, `pavucontrol`, `blueman`, `xdg-utils`, `fontconfig`, `qt6-shadertools` и шрифт **JetBrainsMono Nerd Font** (без него вместо иконок будут квадратики).
 
 ### Установка
 
+Одной командой:
+
 ```bash
-git clone https://github.com/22miligrams-cmyk/.Tech.git ~/.tech/shell
-cd ~/.tech/shell
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install.sh | bash
 ```
 
-Установщик по шагам:
+Если не хочешь запускать что попало из интернета (и правильно), скачай `install.sh`, прочитай и запусти: `bash install.sh`.
 
-1. спросит язык (русский / English);
-2. определит дистрибутив (Arch, Debian/Ubuntu, Fedora, openSUSE) и версию Hyprland;
-3. найдёт недостающие пакеты и предложит их поставить (на Arch `quickshell` при необходимости возьмёт из AUR через `yay`/`paru`);
-4. соберёт шейдеры (`.frag`/`.vert` → `.qsb`);
-5. предложит ссылку `~/.config/quickshell/tech`, чтобы работало `quickshell -c tech`;
-6. создаст стартовый `~/.cache/quickshell/colors.json`;
-7. **предложит добавить автозапуск** — в `hyprland.lua` (Lua-формат, Hyprland 0.55+) или, если есть только старый `hyprland.conf`, в него; перед правкой делается бэкап `*.bak-<дата>`;
-8. **предложит сразу запустить шелл** (`quickshell -d`), а если он уже работает — перезапустить.
+**Как это пройдёт:**
 
-Флаги установщика:
+1. Выбираешь язык: русский или English.
+2. Установщик смотрит, какой у тебя дистрибутив (Arch, Debian/Ubuntu, Fedora, openSUSE) и какая версия Hyprland.
+3. Показывает, чего не хватает. ✔ — есть, ✘ — нет, но поставлю, ! — в репозиториях нет, ставь руками.
+4. Появляется меню шагов. Стрелки ↑↓ двигают, **пробел** включает и выключает пункт, **Enter** запускает. Что уже сделано (шрифт, цвета…), помечено и пропускается.
+5. Дальше он сам: ставит пакеты, качает шелл в `~/.tech/shell`, собирает шейдеры, создаёт стартовые цвета, добавляет автозапуск и запускает шелл.
+6. Один вопрос по дороге: **проверять ли обновления автоматически**. Потом это можно поменять (см. «Обновление»).
+
+> `quickshell` на разных системах ставится по-разному. Arch: из репозиториев или AUR (`yay`/`paru`). Fedora: из COPR `errornr/quickshell`. Debian/Ubuntu: в репозиториях его нет, придётся ставить руками по [инструкции](https://quickshell.org).
+
+**Флаги установщика**
 
 | Флаг | Что делает |
 |---|---|
-| `--yes`, `-y` | отвечать «да» на все вопросы |
-| `--dry-run` | ничего не менять, только показать команды |
-| `--help` | краткая справка |
+| `-y`, `--yes` | без вопросов, всё автоматически |
+| `--dry-run` | ничего не менять, только показать, что будет |
+| `--auto-update` / `--no-auto-update` | сразу включить или выключить проверку обновлений |
+| `-h`, `--help` | справка |
 
-Переменная `TECH_DIR` меняет папку, в которую клонируется репозиторий (по умолчанию `~/.tech/shell`).
+Через `curl | bash` флаги передаются так: `curl -fsSL …/install.sh | bash -s -- -y`
+
+**Переменные:** `TECH_LANG=ru` или `en` (язык без вопроса), `TECH_DIR=/путь` (куда ставить, по умолчанию `~/.tech/shell`).
+
+### Обновление
+
+Шелл сам следит за новыми версиями, тебе почти ничего делать не надо.
+
+**Как он узнаёт о новой версии**
+- через 20 секунд после запуска и потом раз в несколько часов сравнивает твой `v.version` с тем, что на GitHub;
+- **каждый раз, когда ты открываешь настройки**, тихо проверяет ещё раз (без уведомлений, просто чтобы показать свежий статус).
+
+**Что ты увидишь**
+- Вышла новая версия — прилетит уведомление «Йоу, есть апдейт!». Оно **пробивает «Не беспокоить»**, чтобы ты точно заметил. Напомнит оно один раз за запуск шелла, пока не обновишься.
+- Открой настройки: первая карточка **«О шелле»** показывает версию, статус и ссылки.
+  - Есть обновление — на ней кнопка **«Обновить до N»**. Нажимаешь, открывается терминал с установщиком, он всё сделает.
+  - Всё свежее — там написано «✓ Всё ок, последняя версия».
+
+**Если не хочешь, чтобы шелл лез на GitHub сам**, выключи автопроверку (ручная проверка и карточка «О шелле» продолжат работать):
+
+```bash
+quickshell ipc -p ~/.tech/shell call updater autoOff   # выключить
+quickshell ipc -p ~/.tech/shell call updater autoOn    # включить обратно
+```
+
+**Остальные команды**
+
+```bash
+quickshell ipc -p ~/.tech/shell call updater check     # проверить прямо сейчас
+quickshell ipc -p ~/.tech/shell call updater status    # что сейчас известно о версиях
+quickshell ipc -p ~/.tech/shell call updater apply     # открыть терминал и запустить установщик
+quickshell ipc -p ~/.tech/shell call updater autoToggle
+```
+
+Настройки (автопроверка, период в часах) лежат в `~/.cache/qs-updater/state.json`.
+
+**Обновить можно и вручную:** просто запусти установщик ещё раз.
+- версии совпали — предложит выйти или переустановить;
+- на GitHub новее — предложит обновиться (новая копия скачается рядом, и только потом заменит старую, поэтому обрыв интернета ничего не сломает);
+- GitHub недоступен — сделает обычный `git pull`.
+
+⚠️ Если ты правил файлы шелла руками, при обновлении они **пропадут**. Установщик предупредит об этом.
+
+Перезапустить шелл: `pkill -x quickshell && quickshell -d -p ~/.tech/shell`
+
+### Автозапуск
+
+Установщик добавляет его сам (и делает бэкап `*.bak-<дата>`). Руками это выглядит так.
+
+**Hyprland 0.55+, `~/.config/hypr/hyprland.lua`:**
+
+```lua
+hl.on("hyprland.start", function()
+  hl.exec_cmd("quickshell -p '/home/USER/.tech/shell'")
+end)
+```
+
+**Старый формат, `~/.config/hypr/hyprland.conf`:**
+
+```ini
+exec-once = quickshell -p '/home/USER/.tech/shell'
+```
 
 ### Ручная установка
 
-1. Поставь зависимости из таблицы выше.
-2. Собери шейдеры:
+Без установщика:
+
+1. Поставь зависимости и JetBrainsMono Nerd Font.
+2. Склонируй репозиторий:
    ```bash
+   git clone https://github.com/22miligrams-cmyk/.Tech.git ~/.tech/shell
+   ```
+3. Собери шейдеры:
+   ```bash
+   cd ~/.tech/shell
    find . -type f \( -name '*.frag' -o -name '*.vert' \) -exec sh -c 'qsb --qt6 -o "$1.qsb" "$1"' _ {} \;
    ```
-3. Положи стартовые цвета в `~/.cache/quickshell/colors.json`:
+4. Положи стартовые цвета в `~/.cache/quickshell/colors.json`:
    ```json
    {
      "bg": "#181825",
@@ -86,58 +150,65 @@ cd ~/.tech/shell
      "secondary": "#3d5a80"
    }
    ```
-4. Запусти: `quickshell -d -p ~/.tech/shell`
-
-### Автозапуск
-
-**Hyprland 0.55+ — `~/.config/hypr/hyprland.lua`:**
-
-```lua
-hl.on("hyprland.start", function()
-  hl.exec_cmd("quickshell -p '/home/USER/.tech/shell'")
-end)
-```
-
-**Старый формат — `~/.config/hypr/hyprland.conf`:**
-
-```ini
-exec-once = quickshell -p '/home/USER/.tech/shell'
-```
-
-### Обновление
-
-```bash
-cd ~/.tech/shell && git pull --ff-only && ./install.sh
-```
-
-Перезапустить шелл: `pkill -x quickshell && quickshell -d -p ~/.tech/shell`
-
-### Структура
-
-```
-shell.qml          точка входа
-Bar.qml            панель
-Logic.qml          логика и состояние
-Visual.qml         общий внешний вид
-assets/  icons/    ресурсы и иконки
-bar/  panels/      части панели и всплывающие панели
-launchers/         лаунчеры
-notifications/     уведомления
-settings/          настройки
-lang/              переводы
-lrc/               тексты песен
-common/            общие компоненты
-```
+5. Запусти: `quickshell -d -p ~/.tech/shell`
 
 ### Цвета
 
-Шелл читает палитру из `~/.cache/quickshell/colors.json` (ключи `bg`, `accent`, `text`, `secondary`). Поменяй значения — и цвета обновятся.
+Палитра берётся из `~/.cache/quickshell/colors.json` (ключи `bg`, `accent`, `text`, `secondary`). Поменял значения — цвета обновились.
+
+### Что где лежит
+
+```
+shell.qml        точка входа
+Bar.qml          панель
+Logic.qml        логика и состояние
+Visual.qml       сборка интерфейса
+v.version        версия (по ней работает обновление)
+assets/ icons/   ресурсы и иконки
+bar/ panels/     панель и всплывающие окошки
+launchers/       лаунчеры
+notifications/   уведомления
+settings/        настройки (в том числе карточка «О шелле»)
+updater/         проверка и установка обновлений
+lang/            переводы (LangRu.qml, LangEn.qml)
+lrc/             тексты песен
+common/          общие компоненты
+```
 
 ### Если что-то не работает
 
-- Запусти шелл из терминала без `-d` — ошибки QML будут видны сразу: `quickshell -p ~/.tech/shell`
-- Не хватает пакета — запусти `./install.sh` ещё раз, он покажет, чего нет.
-- Шейдеры не собрались — проверь, что установлен `qsb` (`qt6-shadertools`).
+| Проблема | Что делать |
+|---|---|
+| Шелл не стартует или выглядит криво | Запусти без `-d`, ошибки QML будут видны: `quickshell -p ~/.tech/shell` |
+| Вместо иконок квадратики | Нет JetBrainsMono Nerd Font. Запусти установщик ещё раз |
+| Не хватает пакета | Запусти установщик ещё раз, он покажет, чего нет |
+| Шейдеры не собрались | Поставь `qsb` (пакет `qt6-shadertools`) |
+| Шелл не стартует при входе | Проверь, что в `hyprland.lua` или `hyprland.conf` есть строка с `quickshell` |
+| Обновление не показывается | `quickshell ipc -p ~/.tech/shell call updater check`, потом `… call updater status`. Если пишет `error`, шелл не достучался до GitHub |
+| `ipc` пишет «could not find config» | Используй `-p ~/.tech/shell`, как в примерах выше |
+
+### Для тех, кто форкает или выпускает обновления
+
+Обновление срабатывает, когда число в `v.version` на GitHub **больше**, чем у пользователя. Поэтому, чтобы выпустить версию:
+
+```bash
+echo 4 > v.version
+git add -A
+git commit -m "что изменилось"
+git pull --rebase origin main && git push origin main
+```
+
+`install.sh` лежит в корне репозитория, но в `~/.tech/shell` не копируется. Если правишь его, добавляй с флагом: `git add --sparse install.sh`.
+
+### Удаление
+
+```bash
+pkill -x quickshell
+rm -rf ~/.tech/shell ~/.cache/qs-updater
+rm -f ~/.config/quickshell/tech
+```
+
+И убери блок `.Tech shell` из `hyprland.lua` или `hyprland.conf`. Бэкапы `.bak-<дата>` лежат рядом, можно просто вернуть.
 
 ### Лицензия
 
@@ -149,29 +220,82 @@ common/            общие компоненты
 
 ### What is this
 
-`.Tech` is a set of dotfiles for [Hyprland](https://hypr.land): a bar, popup panels, launchers, notifications and settings written in QML for [Quickshell](https://quickshell.org). The UI is available in Russian and English.
+`.Tech` is a desktop shell for [Hyprland](https://hypr.land), written entirely in QML on [Quickshell](https://quickshell.org): bar, popup panels, launchers, notifications, settings. The UI comes in Russian and English.
 
-### Requirements
+I build it for myself and share it as is, so some edges are rough. Found a bug or have an idea? Open an [issue](https://github.com/22miligrams-cmyk/.Tech/issues).
 
-- **Hyprland 0.55 or newer** — the config is written in Lua (`hyprland.lua`) from that version on. The old hyprlang `hyprland.conf` still works in 0.55 but is deprecated; the installer handles both.
+### What you need
+
+- **Hyprland 0.55+** (the config is Lua, `hyprland.lua`, from that version; the old `hyprland.conf` still works)
 - **Quickshell**
-- A Wayland session and PipeWire
+- Wayland and PipeWire
 
-The installer checks and offers to install the rest (`git`, `jq`, `python3`, `wireplumber`, `pavucontrol`, `blueman`, `xdg-utils`, `qt6-shadertools`).
+The installer checks everything else and offers to install what's missing: `git`, `curl`, `jq`, `python3`, `wireplumber`, `pavucontrol`, `blueman`, `xdg-utils`, `fontconfig`, `qt6-shadertools`, plus **JetBrainsMono Nerd Font** (without it icons show up as boxes).
 
 ### Install
 
+One command:
+
 ```bash
-git clone https://github.com/22miligrams-cmyk/.Tech.git ~/.tech/shell
-cd ~/.tech/shell
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install.sh | bash
 ```
 
-The installer detects your distro (Arch, Debian/Ubuntu, Fedora, openSUSE) and Hyprland version, installs missing packages, builds shaders, links `~/.config/quickshell/tech`, creates a starter colors file, then **offers to add autostart** (to `hyprland.lua` on 0.55+, or to `hyprland.conf` on older setups, with a backup) and **offers to launch the shell right away**.
+Or download `install.sh`, read it, and run `bash install.sh`.
 
-Flags: `--yes` / `-y` (answer yes to everything), `--dry-run` (change nothing, just print), `--help`.
+**What happens:**
+
+1. You pick a language.
+2. It detects your distro (Arch, Debian/Ubuntu, Fedora, openSUSE) and Hyprland version.
+3. It shows what's missing. ✔ found, ✘ missing and will be installed, ! not in the repos, install by hand.
+4. A step menu appears: **↑↓** to move, **Space** to toggle, **Enter** to start. Steps already done are marked and skipped.
+5. Then it installs packages, downloads the shell to `~/.tech/shell`, builds shaders, creates starter colors, adds autostart and launches the shell.
+6. One question on the way: **check for updates automatically?** You can change it later (see "Updates").
+
+`quickshell` comes from the repos or AUR on Arch, from the `errornr/quickshell` COPR on Fedora, and has to be installed by hand on Debian/Ubuntu (see the [instructions](https://quickshell.org)).
+
+**Flags:** `-y` / `--yes` (no questions), `--dry-run` (change nothing, just show), `--auto-update` / `--no-auto-update` (answer the update question up front), `--help`. With `curl | bash`: `… | bash -s -- -y`.
+**Env:** `TECH_LANG=ru|en`, `TECH_DIR=<install dir>`.
+
+### Updates
+
+The shell watches for new versions itself, so you rarely have to do anything.
+
+**How it finds out**
+- 20 seconds after start, and then every few hours, it compares your `v.version` with the one on GitHub;
+- **every time you open Settings** it quietly checks again (no notification, just to show a fresh status).
+
+**What you'll see**
+- A new version is out: you get a "Yo, there's an update!" notification. It **breaks through Do Not Disturb** so you don't miss it, and it reminds you once per shell launch until you update.
+- Open Settings: the first card, **About**, shows the version, the status and some links.
+  - Update available: it has an **"Update to N"** button. Click it and a terminal opens with the installer, which does the rest.
+  - Up to date: it says "✓ All good, latest version".
+
+**Don't want the shell to contact GitHub on its own?** Turn auto-check off (manual check and the About card keep working):
+
+```bash
+quickshell ipc -p ~/.tech/shell call updater autoOff
+quickshell ipc -p ~/.tech/shell call updater autoOn
+```
+
+**Other commands**
+
+```bash
+quickshell ipc -p ~/.tech/shell call updater check    # check right now
+quickshell ipc -p ~/.tech/shell call updater status   # what is known about versions
+quickshell ipc -p ~/.tech/shell call updater apply    # open a terminal and run the installer
+```
+
+Settings (auto-check, interval in hours) live in `~/.cache/qs-updater/state.json`.
+
+**Manual update:** just run the installer again. Same version: it offers to exit or reinstall. GitHub is newer: it offers to update (the new copy is downloaded first and replaces the old one only after that). GitHub unreachable: plain `git pull`.
+
+⚠️ Local edits to the shell files are **lost** on update. The installer warns you.
+
+Restart the shell: `pkill -x quickshell && quickshell -d -p ~/.tech/shell`
 
 ### Autostart (manual)
+
+The installer adds it for you (with a backup). By hand:
 
 ```lua
 -- ~/.config/hypr/hyprland.lua  (Hyprland 0.55+)
@@ -185,11 +309,36 @@ end)
 exec-once = quickshell -p '/home/USER/.tech/shell'
 ```
 
-### Update
+### Troubleshooting
+
+- Run the shell without `-d` to see QML errors: `quickshell -p ~/.tech/shell`
+- Boxes instead of icons: JetBrainsMono Nerd Font is missing, run the installer again.
+- Shaders not built: install `qsb` (`qt6-shadertools`).
+- No update showing: run `… call updater check`, then `… call updater status`. `error` means GitHub couldn't be reached.
+- `ipc` says it could not find the config: use `-p ~/.tech/shell` as in the examples.
+
+### Releasing an update (for forks and for me)
+
+An update triggers when the number in `v.version` on GitHub is **greater** than the user's:
 
 ```bash
-cd ~/.tech/shell && git pull --ff-only && ./install.sh
+echo 4 > v.version
+git add -A
+git commit -m "what changed"
+git pull --rebase origin main && git push origin main
 ```
+
+`install.sh` lives in the repo root but is not copied into `~/.tech/shell`; add it with `git add --sparse install.sh`.
+
+### Uninstall
+
+```bash
+pkill -x quickshell
+rm -rf ~/.tech/shell ~/.cache/qs-updater
+rm -f ~/.config/quickshell/tech
+```
+
+Then remove the `.Tech shell` block from `hyprland.lua` / `hyprland.conf` (backups named `.bak-<date>` are right next to them).
 
 ### License
 
