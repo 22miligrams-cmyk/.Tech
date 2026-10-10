@@ -26,6 +26,7 @@ import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 import "../bar"
 import "../common"
+import "../icons"
 import "../lang"
 
 PanelWindow {
@@ -390,6 +391,7 @@ PanelWindow {
         property bool active: false
         property bool usable: true
         property string glyph: ""
+        property string iconName: ""         // имя svg из icons/ (если задано - рисуем его вместо глифа)
         property real iconSize: 16
         property color fillColor: cc.colAccent
         signal fired()
@@ -413,8 +415,18 @@ PanelWindow {
             cornerRadius: tile.radius
         }
 
+        Icon {
+            anchors.centerIn: parent
+            visible: tile.iconName !== ""
+            name: tile.iconName
+            size: tile.iconSize
+            color: hold.hold > 0.5 ? cc.colBg : (tile.active ? cc.colAccent : cc.colText)
+            Behavior on color { ColorAnimation { duration: 200 } }
+        }
+
         Text {
             anchors.centerIn: parent
+            visible: tile.iconName === ""
             text: tile.glyph
             color: hold.hold > 0.5 ? cc.colBg : (tile.active ? cc.colAccent : cc.colText)
             font.pixelSize: tile.iconSize
@@ -641,7 +653,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                glyph: "\uf1eb"
+                                iconName: "wifi"
+                                iconSize: 24
                                 active: cc.wifiOn
                                 fillColor: cc.colAccent
                                 onFired: cc.setWifi(!cc.wifiOn)
@@ -654,7 +667,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                glyph: "\uf293"
+                                iconName: "bluetooth"
+                                iconSize: 24
                                 active: cc.btOn
                                 usable: cc.btAdapter !== null
                                 fillColor: cc.colAccent
@@ -667,7 +681,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                glyph: cc.dndOn ? "\uf1f6" : "\uf0f3"
+                                iconName: cc.dndOn ? "notificationsOff" : "notifications"
+                                iconSize: 24
                                 active: cc.dndOn
                                 fillColor: cc.colAccent
                                 onFired: { if (cc.settings) cc.settings.doNotDisturb = !cc.settings.doNotDisturb }
@@ -680,7 +695,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                glyph: cc.micMuted ? "\uf131" : "\uf130"
+                                iconName: cc.micMuted ? "micOff" : "mic"
+                                iconSize: 24
                                 active: cc.micAudio !== null && !cc.micMuted
                                 usable: cc.micAudio !== null
                                 fillColor: cc.colAccent
@@ -727,20 +743,33 @@ PanelWindow {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             visible: notifArea.count > 0
-                            width: clearTxt.implicitWidth + 20
+                            width: clearRow.implicitWidth + 20
                             height: 24
                             radius: cc.cr
                             color: Qt.alpha(cc.colText, clearMa.containsMouse ? 0.18 : 0.10)
 
                             Behavior on color { ColorAnimation { duration: 150 } }
 
-                            Text {
-                                id: clearTxt
+                            Row {
+                                id: clearRow
                                 anchors.centerIn: parent
-                                text: "\uf00d  " + cc.t("notif.clear", "Очистить")
-                                color: cc.colText
-                                font.pixelSize: 10
-                                font.family: cc.fontFamily
+                                spacing: 6
+
+                                Icon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "close"
+                                    size: 10
+                                    color: cc.colText
+                                }
+
+                                Text {
+                                    id: clearTxt
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: cc.t("notif.clear", "Очистить")
+                                    color: cc.colText
+                                    font.pixelSize: 10
+                                    font.family: cc.fontFamily
+                                }
                             }
 
                             MouseArea {
@@ -770,12 +799,11 @@ PanelWindow {
                         visible: notifArea.count === 0
                         opacity: 0.5
 
-                        Text {
+                        Icon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "\uf1f6"
+                            name: "notificationsOff"
                             color: cc.colAccent
-                            font.pixelSize: 22
-                            font.family: cc.fontFamily
+                            size: 24
                         }
 
                         Text {
@@ -925,7 +953,8 @@ PanelWindow {
                         HoldTile {
                             width: actions.cell
                             height: actions.cell
-                            glyph: "\uf023"
+                            iconName: "padlock"
+                            iconSize: 24
                             fillColor: cc.colAccent
                             onFired: cc.runAfterClose(["sh", "-c", "quickshell ipc -p ~/.tech/shell call lock lock"])
                         }
@@ -933,7 +962,8 @@ PanelWindow {
                         HoldTile {
                             width: actions.cell
                             height: actions.cell
-                            glyph: "\uf186"
+                            iconName: "dnd"
+                            iconSize: 24
                             fillColor: cc.colAccent
                             onFired: cc.run(["systemctl", "suspend"])
                         }
@@ -941,7 +971,8 @@ PanelWindow {
                         HoldTile {
                             width: actions.cell
                             height: actions.cell
-                            glyph: "\uf021"
+                            iconName: "restart"
+                            iconSize: 24
                             fillColor: cc.colDanger
                             onFired: cc.run(["systemctl", "reboot"])
                         }
@@ -949,7 +980,8 @@ PanelWindow {
                         HoldTile {
                             width: actions.cell
                             height: actions.cell
-                            glyph: "\uf011"
+                            iconName: "power"
+                            iconSize: 24
                             fillColor: cc.colDanger
                             onFired: cc.run(["systemctl", "poweroff"])
                         }

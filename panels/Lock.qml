@@ -61,7 +61,7 @@ Scope {
     property real camMoveY: 28
     property real camTilt: 3.5
     property string pamConfig: "login"
-    property int holdMs: 2000             // сколько держать кнопку / Enter, чтобы сработало (мс)
+    property int holdMs: 700             // сколько держать кнопку / Enter, чтобы сработало (мс)
 
     property color colBg: "#181825"
     property color colAccent: "#a3cef1"
@@ -2380,7 +2380,7 @@ Scope {
                                     Repeater {
                                         model: [
                                             { id: "suspend",  svg: "dnd",   g: "\uf186", cmd: ["systemctl", "suspend"],  confirm: false },
-                                            { id: "reboot",   svg: "",      g: "\uf021", cmd: ["systemctl", "reboot"],   confirm: true },
+                                            { id: "reboot",   svg: "restart", g: "\uf021", cmd: ["systemctl", "reboot"],   confirm: true },
                                             { id: "poweroff", svg: "power", g: "\uf011", cmd: ["systemctl", "poweroff"], confirm: true }
                                         ]
 
@@ -2416,7 +2416,7 @@ Scope {
                                                 Behavior on color { ColorAnimation { duration: 200 } }
                                             }
 
-                                            // для перезагрузки svg нет - остаётся глиф из шрифта
+                                            // запасной вариант: глиф из шрифта рисуется, только если для кнопки не задан svg
                                             Text {
                                                 anchors.centerIn: parent
                                                 visible: pbtn.modelData.svg === ""
