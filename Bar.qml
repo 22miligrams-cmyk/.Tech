@@ -44,6 +44,7 @@ PanelWindow {
     required property var trayPanelComp
     required property var btMenuComp
     required property var wsOverviewComp
+    required property var controlCenterComp
 
     readonly property bool island: barLayout.island !== false
     readonly property real edgeGap: island ? 6 : 0
@@ -1737,6 +1738,9 @@ PanelWindow {
                         count: visualRoot.notify.unreadCount
                         dnd: settingsMenuComp.doNotDisturb
                         anchors.verticalCenter: parent.verticalCenter
+
+                        // пока центр управления открыт, бар с автоскрытием не прячет кнопку
+                        readonly property bool keepOpen: notifCenterComp.visible
 
                         onClicked: {
                             notifCenterComp.toggleMenu()

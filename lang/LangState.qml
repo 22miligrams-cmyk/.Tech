@@ -4,5 +4,5 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    property string lang: "ru"
+    property string lang: Tr.lang
 }

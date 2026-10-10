@@ -7,7 +7,7 @@
 //   4. PanelWindow с карточками, анимацией появления/ухода и блюром под стеклом
 //
 // Как связано с остальным:
-//   - NotifCenter.qml берёт отсюда history и выставляет centerOpen
+//   - ControlCenter.qml берёт отсюда history и выставляет centerOpen
 //   - DND (doNotDisturb) приходит из меню настроек: всплывашки не показываем, история копится
 //   - если приложение само закрыло уведомление (прочитал в мессенджере) — шлём sourceRead,
 //     и карточка пропадает из центра
@@ -36,7 +36,7 @@ Scope {
     readonly property string fontFamily: "JetBrainsMono Nerd Font, Monospace"
 
     // ---------- Блюр под карточками ----------
-    property string wallpaper: ""      // путь к обоям (приходит из Visual.qml, как и у NotifCenter)
+    property string wallpaper: ""      // путь к обоям (приходит из Visual.qml, как и у ControlCenter)
     property bool blurEnabled: true    // включается в меню настроек
     property real blurRadius: 16       // сила размытия, px
     property color blurTint: Qt.rgba(0.05, 0.05, 0.07, 0.25)
@@ -45,7 +45,7 @@ Scope {
     readonly property int maxHistory: 100    // и больше сотни в истории тоже
     property int nextUid: 0
 
-    // Открыт ли центр уведомлений (это выставляет сам NotifCenter)
+    // Открыт ли центр уведомлений (это выставляет сам ControlCenter)
     property bool centerOpen: false
 
     // Не беспокоить (из меню настроек): всплывашки не показываем, история всё равно копится
@@ -148,6 +148,7 @@ Scope {
         historyModel.insert(0, {
             uid: item.uid,
             appName: item.appName,
+            appIcon: item.appIcon || "",
             summary: item.summary,
             body: item.body,
             kind: item.kind,
@@ -188,6 +189,7 @@ Scope {
         pushNotification({
             uid: nextUid++,
             appName: ".Tech",
+            appIcon: "",
             summary: title || "",
             body: body || "",
             timeout: kind === "update" ? 30000 : 8000,
@@ -232,6 +234,7 @@ Scope {
             notifRoot.pushNotification({
                 uid: uid,
                 appName: notification.appName || "Уведомление",
+                appIcon: notification.appIcon || notification.desktopEntry || "",
                 summary: notification.summary || "",
                 body: notification.body || "",
                 timeout: timeout,

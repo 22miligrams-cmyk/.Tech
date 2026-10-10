@@ -278,6 +278,15 @@ QtObject {
         "upd.errorTitle": ".Tech",
         "upd.errorBody": "Не получилось проверить обновления. Есть ли интернет?",
         "upd.pressEnter": "Enter — закрыть",
-        "upd.noTerminal": "Не нашёл терминал (kitty / foot / alacritty / xterm). Задай $TERMINAL или запусти install.sh руками."
+        "upd.noTerminal": "Не нашёл терминал (kitty / foot / alacritty / xterm). Задай $TERMINAL или запусти install.sh руками.",
+        "lock.hint": "нажми любую клавишу",
+        "lock.password": "Пароль",
+        "lock.wrongPass": "Неверный пароль",
+        "lock.errPam": "Ошибка PAM",
+        "lock.noMedia": "Ничего не играет",
+        "lock.untitled": "Без названия",
+        "lock.suspend": "Сон",
+        "lock.reboot": "Перезагрузка",
+        "lock.poweroff": "Выключение"
     })
 }

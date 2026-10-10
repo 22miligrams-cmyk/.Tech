@@ -60,6 +60,8 @@ ColumnLayout {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
+            // не даём карусели (ListView) перехватить жест как свайп, пока тянем ползунок
+            preventStealing: true
 
             // переводит позицию мыши в значение 0..1 (с учётом половины ширины ползунка по краям)
             function setFrom(mx) { root.valueRequested((mx - 7) / (width - 14)) }

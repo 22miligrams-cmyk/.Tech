@@ -5,11 +5,28 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 Singleton {
     id: root
 
+    readonly property string settingsPath: (Quickshell.env("XDG_DATA_HOME") || ((Quickshell.env("HOME") || "") + "/.local/share"))
+        + "/qs-launchers/settings.json"
+
     property string lang: "ru"
+
+    FileView {
+        id: settingsFile
+        path: root.settingsPath
+        watchChanges: true
+        onLoaded: {
+            try {
+                const o = JSON.parse(settingsFile.text().trim())
+                if (root.langs.indexOf(o.lang) >= 0) root.lang = o.lang
+            } catch (e) {}
+        }
+        onFileChanged: reload()
+    }
 
     readonly property var langs: ["ru", "en"]
 

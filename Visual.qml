@@ -37,9 +37,9 @@ Item {
 
     // открыта ли хоть одна панель
     readonly property bool overlayOpen: settingsMenuComp.visible || calendarComp.visible || sysMenuComp.visible
-        || volMenuComp.visible || mprisPanelComp.visible || notifCenterComp.visible
+        || volMenuComp.visible || mprisPanelComp.visible
         || clipPanelComp.visible || trayPanelComp.visible || btMenuComp.visible || wsOverviewComp.visible
-        || lyricsPanelComp.visible
+        || lyricsPanelComp.visible || controlCenterComp.visible
     onOverlayOpenChanged: if (overlayOpen) bar.redetectBackdrop()
 
     readonly property bool blurOn: settingsMenuComp.blurEnabled
@@ -90,6 +90,7 @@ Item {
     function volAnchor() { return bar.blockAnchor("vol") }
     function mprisAnchor() { return bar.blockAnchor("mpris") }
     function lyricsAnchor() { return bar.blockAnchor("lyrics") }
+    function ccAnchor() { return bar.blockAnchor("notif") }
 
     readonly property var noRect: ({ x: 0, y: 0, w: 0, h: 0, lo: 0, hi: 0 })
 
@@ -167,11 +168,12 @@ Item {
         mprisPanelComp: mprisPanelComp
         lyricsPanelComp: lyricsPanelComp
         lyricsComp: lyricsComp
-        notifCenterComp: notifCenterComp
+        notifCenterComp: controlCenterComp   // колокольчик открывает центр управления
         clipPanelComp: clipPanelComp
         trayPanelComp: trayPanelComp
         btMenuComp: btMenuComp
         wsOverviewComp: wsOverviewComp
+        controlCenterComp: controlCenterComp
     }
 
     Calendar {
@@ -265,19 +267,6 @@ Item {
         colSecondary: logic.colSecondary
     }
 
-    NotifCenter {
-        id: notifCenterComp
-        wallpaper: visualRoot.wallpaperPath
-        blurEnabled: settingsMenuComp.blurEnabled
-        blurRadius: settingsMenuComp.blurPx
-        store: visualRoot.notify
-        colBg: logic.colBg
-        colGlass: logic.colGlass
-        colAccent: logic.colAccent
-        colText: logic.colText
-        colSecondary: logic.colSecondary
-    }
-
     ClipboardPanel {
         id: clipPanelComp
         wallpaper: visualRoot.wallpaperPath
@@ -336,6 +325,37 @@ Item {
         colSecondary: logic.colSecondary
     }
 
+    ControlCenter {
+        id: controlCenterComp
+        screen: bar.screen
+        settings: settingsMenuComp
+        sink: visualRoot.sinkAudio
+        store: notify
+        wallpaper: visualRoot.wallpaperPath
+        blurEnabled: settingsMenuComp.blurEnabled
+        blurRadius: settingsMenuComp.blurPx * 0.55
+        side: bar.applied
+        anchorRect: controlCenterComp.visible ? visualRoot.ccAnchor() : visualRoot.noRect
+        colGlass: logic.colGlass
+        colBg: logic.colBg
+        colAccent: logic.colAccent
+        colText: logic.colText
+        colSecondary: logic.colSecondary
+    }
+
+    // экран блокировки: IPC-цель "lock" (quickshell ipc -p ~/.tech/shell call lock lock)
+    Lock {
+        id: lockComp
+        store: notify
+        wallpaper: visualRoot.wallpaperPath
+        blurEnabled: settingsMenuComp.blurEnabled
+        colBg: logic.colBg
+        colGlass: logic.colGlass
+        colAccent: logic.colAccent
+        colText: logic.colText
+        colSecondary: logic.colSecondary
+    }
+
     SettingsMenu {
         id: settingsMenuComp
         updater: updaterComp
@@ -355,7 +375,7 @@ Item {
         function only(c): void {
             if (!c.visible) {
                 const all = [settingsMenuComp, calendarComp, sysMenuComp, volMenuComp, mprisPanelComp,
-                             notifCenterComp, clipPanelComp, trayPanelComp, btMenuComp, wsOverviewComp, altTabComp, lyricsPanelComp]
+                             clipPanelComp, trayPanelComp, btMenuComp, wsOverviewComp, altTabComp, lyricsPanelComp, controlCenterComp]
                 for (const o of all)
                     if (o !== c && o.visible && !o.isClosing) o.toggleMenu()
             }
@@ -367,12 +387,13 @@ Item {
         function volume(): void { only(volMenuComp) }
         function player(): void { only(mprisPanelComp) }
         function lyrics(): void { only(lyricsPanelComp) }
-        function notifications(): void { only(notifCenterComp) }
+        function notifications(): void { only(controlCenterComp) }
         function clipboard(): void { only(clipPanelComp) }
         function tray(): void { only(trayPanelComp) }
         function bluetooth(): void { only(btMenuComp) }
         function workspaces(): void { only(wsOverviewComp) }
         function settings(): void { only(settingsMenuComp) }
+        function controlCenter(): void { only(controlCenterComp) }
 
         function alttab(): void { altTabStart(1) }
         function alttabPrev(): void { altTabStart(-1) }
@@ -380,7 +401,7 @@ Item {
         function altTabStart(d): void {
             if (!altTabComp.visible) {
                 const all = [settingsMenuComp, calendarComp, sysMenuComp, volMenuComp, mprisPanelComp,
-                             notifCenterComp, clipPanelComp, trayPanelComp, btMenuComp, wsOverviewComp, lyricsPanelComp]
+                             clipPanelComp, trayPanelComp, btMenuComp, wsOverviewComp, lyricsPanelComp, controlCenterComp]
                 for (const o of all)
                     if (o.visible && !o.isClosing) o.toggleMenu()
             }

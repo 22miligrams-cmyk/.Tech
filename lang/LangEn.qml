@@ -278,6 +278,15 @@ QtObject {
         "upd.errorTitle": ".Tech",
         "upd.errorBody": "Could not check for updates. Is the internet up?",
         "upd.pressEnter": "Press Enter to close",
-        "upd.noTerminal": "No terminal found (kitty / foot / alacritty / xterm). Set $TERMINAL or run install.sh by hand."
+        "upd.noTerminal": "No terminal found (kitty / foot / alacritty / xterm). Set $TERMINAL or run install.sh by hand.",
+        "lock.hint": "press any key",
+        "lock.password": "Password",
+        "lock.wrongPass": "Incorrect password",
+        "lock.errPam": "PAM error",
+        "lock.noMedia": "Nothing playing",
+        "lock.untitled": "Untitled",
+        "lock.suspend": "Sleep",
+        "lock.reboot": "Restart",
+        "lock.poweroff": "Shut down"
     })
 }

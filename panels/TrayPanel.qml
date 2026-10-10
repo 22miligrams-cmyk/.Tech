@@ -87,6 +87,24 @@ PanelWindow {
     property real blurRadius: 30
     property real blurDim: 0.12
 
+    // эффект камеры: панель чуть двигается и наклоняется за мышкой (как в BtMenu)
+    property bool camEffect: true            // потом можно привязать к barLayout.camEffect из Visual.qml
+    readonly property bool camOn: camEffect
+    property real camStrength: 1.0
+    property real camMoveX: 50
+    property real camMoveY: 28
+    property real camTilt: 3.5
+    readonly property real camTargetX: (camOn && camHover.hovered && width > 0)
+        ? clamp01(camHover.point.position.x / width) * 2 - 1 : 0
+    readonly property real camTargetY: (camOn && camHover.hovered && height > 0)
+        ? clamp01(camHover.point.position.y / height) * 2 - 1 : 0
+    property real camX: camTargetX
+    property real camY: camTargetY
+    Behavior on camX { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+    Behavior on camY { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+
+    function clamp01(v) { return Math.max(0, Math.min(1, v)) }
+
     LiveBackdrop {
         id: backdrop
         screenObj: panel.screen
@@ -120,6 +138,12 @@ PanelWindow {
         opacity: menuContainer.opacity * 0.5
     }
 
+    Item {
+        id: camSurface
+        anchors.fill: parent
+        HoverHandler { id: camHover }
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: panel.toggleMenu()
@@ -133,6 +157,25 @@ PanelWindow {
 
         scale: 0.0
         opacity: 0.0
+
+        transform: [
+            Translate {
+                x: -panel.camX * panel.camMoveX * panel.camStrength
+                y: -panel.camY * panel.camMoveY * panel.camStrength
+            },
+            Rotation {
+                origin.x: menuContainer.width / 2
+                origin.y: menuContainer.height / 2
+                axis { x: 0; y: 1; z: 0 }
+                angle: panel.camX * panel.camTilt * panel.camStrength
+            },
+            Rotation {
+                origin.x: menuContainer.width / 2
+                origin.y: menuContainer.height / 2
+                axis { x: 1; y: 0; z: 0 }
+                angle: -panel.camY * panel.camTilt * panel.camStrength
+            }
+        ]
 
         MouseArea {
             anchors.fill: parent
@@ -160,39 +203,21 @@ PanelWindow {
             width: parent.width
             spacing: 25
 
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 10
+            // обёртка на всю ширину, PanelHeader вне layout, центруется якорем
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 60
 
-                Rectangle {
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    radius: 6
-                    color: panel.colSecondary
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "tray"
-                        size: 16
-                        color: panel.colAccent
-                    }
-                }
-
-                Text {
-                    text: tr("tray.title")
-                    color: panel.colText
-                    font.bold: true
-                    font.pixelSize: 15
-                    font.family: panel.fontFamily
-                }
-
-                Text {
-                    text: panel.trayCount
-                    visible: panel.trayCount > 0
-                    color: panel.colAccent
-                    font.bold: true
-                    font.pixelSize: 15
-                    font.family: panel.fontFamily
+                PanelHeader {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    colBg: panel.colBg
+                    colAccent: panel.colAccent
+                    colText: panel.colText
+                    colSecondary: panel.colSecondary
+                    fontFamily: panel.fontFamily
+                    iconName: "tray"
+                    title: tr("tray.title")
+                    badge: panel.trayCount > 0 ? String(panel.trayCount) : ""
                 }
             }
 
