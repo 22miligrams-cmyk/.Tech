@@ -607,7 +607,7 @@ PanelWindow {
 
                     CcSlider {
                         width: parent.width
-                        visible: cc.brightAvail && cc.isLaptop
+                        visible: cc.brightAvail
                         height: visible ? 22 : 0
                         glyph: "\uf185"
                         value: cc.bright
