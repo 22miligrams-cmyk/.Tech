@@ -42,6 +42,9 @@ Rectangle {
     // false — цвет меняется сразу, без анимации (нужно чтобы цельный бар анимировался синхронно)
     property bool animateColor: true
 
+    // с какой стороны экрана бар: от этого зависит, куда можно выносить бейдж
+    property string barSide: "bottom"
+
     signal clicked()
 
     Behavior on color { enabled: notifBtn.animateColor; ColorAnimation { duration: 300 } }
@@ -70,8 +73,9 @@ Rectangle {
 
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.rightMargin: -4
-        anchors.topMargin: -3
+        // бейдж выступает за угол, но только в сторону от панели (она стыкуется к кнопке вплотную и закрыла бы его)
+        anchors.rightMargin: notifBtn.barSide === "left" ? 0 : -4
+        anchors.topMargin: notifBtn.barSide === "bottom" ? 0 : -3
 
         scale: notifBtn.count > 0 ? 1 : 0
         visible: scale > 0

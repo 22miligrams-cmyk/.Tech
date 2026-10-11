@@ -36,7 +36,27 @@ PanelWindow {
 
     readonly property bool hasPlayer: player !== null && player !== undefined
     readonly property bool playing: hasPlayer && player.playbackState === MprisPlaybackState.Playing
-    readonly property real len: hasPlayer && player.lengthSupported && player.length > 0 ? player.length : 0
+
+    // Firefox иногда не выставляет lengthSupported/length через обычные свойства Quickshell
+    // (сам по себе mpris:length на шине приходит нормально, int64, проверено busctl),
+    // поэтому длину читаем напрямую из сырого metadata как основной источник,
+    // а на player.length опираемся только как на запасной вариант для остальных плееров.
+    readonly property var meta: hasPlayer && player.metadata ? player.metadata : ({})
+    readonly property real metaLenRaw: {
+        const v = meta && meta["mpris:length"] !== undefined ? Number(meta["mpris:length"]) : 0
+        return isFinite(v) && v > 0 ? v : 0
+    }
+    readonly property real metaLen: metaLenRaw > 0 ? metaLenRaw / 1000000 : 0
+    readonly property real fallbackLen: hasPlayer && player.lengthSupported && player.length > 0 ? player.length : 0
+    readonly property real rawLen: metaLen > 0 ? metaLen : fallbackLen
+
+    // во время сика (и вообще при сменах позиции) Firefox на миг отдаёт пустой metadata,
+    // rawLen на этот момент падает в 0 — не даём len дёргаться на --:--, держим последнее
+    // валидное значение, пока трек реально не сменится
+    property real stickyLen: 0
+    onRawLenChanged: if (rawLen > 0) stickyLen = rawLen
+
+    readonly property real len: stickyLen
     readonly property bool canSeekNow: hasPlayer && player.canSeek && len > 0
 
     property real pos: 0
@@ -261,7 +281,7 @@ PanelWindow {
         return Tr.tr("mp.eq.custom")
     }
 
-    onPlayerChanged: { syncPos(); syncVol() }
+    onPlayerChanged: { stickyLen = 0; syncPos(); syncVol() }
     onVisibleChanged: {
         if (visible) { syncPos(); syncVol() }
         else naming = false
@@ -271,7 +291,7 @@ PanelWindow {
         target: mp.player
         ignoreUnknownSignals: true
         function onPlaybackStateChanged() { mp.syncPos() }
-        function onTrackTitleChanged() { mp.syncPos() }
+        function onTrackTitleChanged() { mp.stickyLen = 0; mp.syncPos() }
         function onVolumeChanged() { mp.syncVol() }
     }
 
@@ -318,8 +338,13 @@ PanelWindow {
     readonly property bool horiz: side === "top" || side === "bottom"
     readonly property real pad: 16
     readonly property real cr: 6
-    readonly property real pw: horiz ? Math.max(340, anchorRect.w) : 340
-    readonly property real ph: body.implicitHeight + pad * 2
+    readonly property real edge: 16
+    readonly property real pw: Math.min(horiz ? Math.max(340, anchorRect.w) : 340, width - 16)
+    // на боковом баре высота считается по длине блока, как ширина на нижнем (но не меньше содержимого)
+    readonly property real ph: Math.min(horiz ? body.implicitHeight + pad * 2 : Math.max(body.implicitHeight + pad * 2, anchorRect.h), height - 16)
+    // отступ от края экрана: 16, а если панель на всю длину бара - 8, чтобы совпасть с его краями
+    readonly property real edgeX: pw >= width - 16.5 ? 8 : edge
+    readonly property real edgeY: ph >= height - 16.5 ? 8 : edge
 
 
     function clamp(v, lo, hi) {
@@ -332,11 +357,11 @@ PanelWindow {
 
     readonly property real px: side === "left" ? anchorRect.x + anchorRect.w + gapNow
         : side === "right" ? anchorRect.x - pw - gapNow
-        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, 8, width - 8 - pw)
+        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, edgeX, width - edgeX - pw)
 
     readonly property real py: side === "bottom" ? anchorRect.y - ph - gapNow
         : side === "top" ? anchorRect.y + anchorRect.h + gapNow
-        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, 8, height - 8 - ph)
+        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, edgeY, height - edgeY - ph)
 
 
     function sq(v) {
@@ -349,6 +374,56 @@ PanelWindow {
 
     property bool isClosing: false
     property real p: 0
+
+    // ── параллакс / 3D-глубина ──────────────────────────────────────────
+    // parallax: false — выключает всё; parallaxAmt — общая сила (1 = по умолчанию)
+    property bool parallax: true
+    property real parallaxAmt: 1.0
+    readonly property real tiltMax: 0.26          // макс. наклон обложки, рад (~15°)
+    property bool idleSway: true                  // плавное «дыхание», пока курсор не над панелью
+    readonly property real perspective: 420       // «расстояние до камеры», px
+
+    // цель: положение курсора относительно обложки (по всему экрану), диапазон -1..1
+    property real idlePhase: 0
+    NumberAnimation on idlePhase {
+        from: 0; to: Math.PI * 2; duration: 7000; loops: Animation.Infinite
+        running: mp.visible && mp.parallax && mp.idleSway && mp.playing && !hov.hovered
+    }
+    readonly property bool idleOn: parallax && idleSway && playing && !hov.hovered
+
+    // расстояние (px) от центра обложки, на котором наклон достигает максимума
+    readonly property real parallaxRange: 450
+    readonly property real coverCX: px + pad + 52
+    readonly property real coverCY: py + pad + 52
+
+    readonly property real lookTX: parallax && hov.hovered
+        ? clamp((hov.point.position.x - coverCX) / parallaxRange, -1, 1) * parallaxAmt
+        : (idleOn ? Math.sin(idlePhase) * 0.35 * parallaxAmt : 0)
+    readonly property real lookTY: parallax && hov.hovered
+        ? clamp((hov.point.position.y - coverCY) / parallaxRange, -1, 1) * parallaxAmt
+        : (idleOn ? Math.cos(idlePhase * 0.8) * 0.25 * parallaxAmt : 0)
+
+    // пружинка: лёгкая инерция и мягкий возврат в центр
+    property real lookX: lookTX
+    property real lookY: lookTY
+    Behavior on lookX { SpringAnimation { spring: 2.6; damping: 0.32; epsilon: 0.002 } }
+    Behavior on lookY { SpringAnimation { spring: 2.6; damping: 0.32; epsilon: 0.002 } }
+
+    // поворот вокруг X и Y + перспективное деление (w = 1 - z/d)
+    function tiltMatrix(ax, ay, d) {
+        const ca = Math.cos(ax), sa = Math.sin(ax)
+        const cb = Math.cos(ay), sb = Math.sin(ay)
+        const r00 = cb,      r01 = 0,  r02 = sb
+        const r10 = sa * sb, r11 = ca, r12 = -sa * cb
+        const r20 = -ca * sb, r21 = sa, r22 = ca * cb
+        // ВАЖНО: z-строка = identity. Если отдать в z настоящий повёрнутый z, часть обложки
+        // уходит за near/far-плоскость Qt Quick и «обрезается» (угол как будто под текстуру).
+        // Глубина идёт только в w (перспектива), z остаётся плоским.
+        return Qt.matrix4x4(r00, r01, r02, 0,
+                            r10, r11, r12, 0,
+                            0,   0,   1,   0,
+                            -r20 / d, -r21 / d, 0, 1)
+    }
 
     function toggleMenu() {
         if (isClosing)
@@ -439,6 +514,9 @@ PanelWindow {
         anchors.fill: parent
         focus: true
 
+        // курсор для параллакса по всему экрану (пассивный — клики и hover детей не трогает)
+        HoverHandler { id: hov }
+
         Keys.onEscapePressed: mp.toggleMenu()
         Keys.onLeftPressed: if (!mp.naming) mp.seekBy(-5)
         Keys.onRightPressed: if (!mp.naming) mp.seekBy(5)
@@ -526,6 +604,61 @@ PanelWindow {
                     onClicked: (mouse) => { mouse.accepted = true; if (mp.naming) mp.cancelNaming() }
                 }
 
+                // слой 0 (самый дальний): размытая обложка, смещается ПО курсору
+                Item {
+                    anchors.fill: parent
+                    clip: true
+                    opacity: coverImg.status === Image.Ready ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                    Image {
+                        width: parent.width + 80
+                        height: parent.height + 80
+                        x: -40 + mp.lookX * 22
+                        y: -40 + mp.lookY * 22
+                        scale: 1.0 + Math.hypot(mp.lookX, mp.lookY) * 0.03
+                        source: coverBox.artUrl
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        sourceSize.width: 128
+                        sourceSize.height: 128
+                        opacity: 0.30
+                        layer.enabled: true
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blur: 1.0
+                            blurMax: 48
+                            saturation: 0.25
+                        }
+                    }
+                }
+
+                // слой 1: мягкая тень под обложкой, уезжает ПРОТИВ наклона и пульсирует от басов
+                Item {
+                    id: coverShadow
+                    width: 104 + 56
+                    height: 104 + 56
+                    x: mp.pad - 28 + mp.lookX * 11
+                    y: mp.pad - 28 + 9 + mp.lookY * 11
+                    scale: 1.0 + Math.hypot(mp.lookX, mp.lookY) * 0.05
+                    opacity: (coverImg.status === Image.Ready ? 0.55 : 0.3) * mp.p
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: 1.0
+                        blurMax: 32
+                    }
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 100
+                        height: 100
+                        radius: mp.cr
+                        color: Qt.darker(coverBox.ringColor, 3.2)
+                    }
+                }
+
                 Column {
                     id: body
                     x: mp.pad
@@ -535,12 +668,24 @@ PanelWindow {
 
                     Row {
                         width: parent.width
-                        spacing: 16
+                        spacing: 30     // было 16: палочки кольца-визуализатора выступают за обложку на ~15px и липли к тексту
 
                         Item {
                             id: coverBox
                             width: 104
                             height: 104
+
+                            // слой 2 (ближний): 3D-наклон к курсору с перспективой
+                            transform: [
+                                Translate { x: -coverBox.width / 2; y: -coverBox.height / 2 },
+                                Matrix4x4 {
+                                    matrix: mp.tiltMatrix(-mp.lookY * mp.tiltMax,
+                                                          mp.lookX * mp.tiltMax,
+                                                          mp.perspective)
+                                },
+                                Translate { x: coverBox.width / 2; y: coverBox.height / 2 },
+                                Translate { x: -mp.lookX * 7; y: -mp.lookY * 6 }
+                            ]
 
                             readonly property string artUrl: mp.hasPlayer && mp.player.trackArtUrl ? mp.player.trackArtUrl : ""
 
@@ -604,6 +749,7 @@ PanelWindow {
                                 id: ring
                                 anchors.fill: parent
                                 visible: level > 0.01
+                                transform: Translate { x: mp.lookX * 3.5; y: mp.lookY * 3.5 }
 
                                 readonly property int bars: 84
                                 readonly property int nBands: 20
@@ -775,6 +921,7 @@ PanelWindow {
                             Rectangle {
                                 anchors.fill: parent
                                 radius: mp.cr
+                                antialiasing: true
                                 color: mp.colSecondary
                                 opacity: coverImg.status === Image.Ready ? 0.0 : 1.0
 
@@ -804,11 +951,30 @@ PanelWindow {
                                 Behavior on opacity { NumberAnimation { duration: 200 } }
 
                                 layer.enabled: true
+                                layer.smooth: true
+                                layer.mipmap: true
+                                layer.textureSize: Qt.size(width * 2, height * 2)
                                 layer.effect: MultiEffect {
                                     maskEnabled: true
                                     maskSource: coverMask
                                     maskThresholdMin: 0.5
                                     maskSpreadAtMin: 1.0
+                                }
+
+                                // стеклянный блик: скользит за курсором, обрезается маской обложки
+                                Rectangle {
+                                    width: 46
+                                    height: parent.height * 1.8
+                                    y: -parent.height * 0.4
+                                    x: parent.width / 2 + mp.lookX * parent.width * 0.7 - width / 2
+                                    rotation: 22
+                                    opacity: Math.min(1, Math.hypot(mp.lookX, mp.lookY) * 1.2) * 0.9
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        GradientStop { position: 0.0; color: "#00ffffff" }
+                                        GradientStop { position: 0.5; color: "#2effffff" }
+                                        GradientStop { position: 1.0; color: "#00ffffff" }
+                                    }
                                 }
                             }
 
@@ -826,9 +992,10 @@ PanelWindow {
                         }
 
                         Column {
-                            width: parent.width - coverBox.width - 16
+                            width: parent.width - coverBox.width - parent.spacing
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 3
+
 
                             Text {
                                 width: parent.width
@@ -886,67 +1053,26 @@ PanelWindow {
                         Item {
                             id: prog
                             width: parent.width
-                            height: 22
+                            height: 32
 
-                            readonly property bool hot: mp.canSeekNow && (pm.containsMouse || mp.seeking)
-                            readonly property real hoverFrac: Math.max(0, Math.min(1, pm.mouseX / Math.max(1, width)))
+                            readonly property bool hot: mp.canSeekNow && (seekBar.hovered || mp.seeking)
+                            readonly property real hoverFrac: Math.max(0, Math.min(1, seekBar.hoverX / Math.max(1, width)))
 
-                            property real thick: hot ? 5 : 4
-                            readonly property real gap: 6
-                            property real vf: mp.frac
-                            readonly property real cx: Math.max(2, Math.min(width - 2, vf * width))
-
-                            Behavior on vf {
-                                enabled: !mp.seeking
-                                NumberAnimation { duration: 250; easing.type: Easing.Linear }
-                            }
-
-                            Behavior on thick { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
-                            Rectangle {
-                                x: 0
-                                y: (parent.height - height) / 2
-                                width: Math.max(0, prog.cx - prog.gap)
-                                height: prog.thick
-                                radius: height / 2
-                                color: mp.colAccent
-                                visible: width > 0.5
-                            }
-
-                            Rectangle {
-                                id: restTrack
-                                x: prog.cx + prog.gap
-                                y: (parent.height - height) / 2
-                                width: Math.max(0, prog.width - x)
-                                height: prog.thick
-                                radius: height / 2
-                                color: Qt.alpha(mp.colText, 0.2)
-                                visible: width > 0.5
-
-                                Rectangle {
-                                    visible: parent.width > 14
-                                    width: 3.2
-                                    height: 3.2
-                                    radius: 1.6
-                                    color: mp.colAccent
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: 3
-                                    anchors.verticalCenter: parent.verticalCenter
+                            FatSlider {
+                                id: seekBar
+                                anchors.fill: parent
+                                value: mp.frac
+                                usable: mp.canSeekNow
+                                colAccent: mp.colAccent
+                                colText: mp.colText
+                                colBg: mp.colBg
+                                fontFamily: mp.fontFamily
+                                radius: mp.cr
+                                onMoved: (v) => { mp.seekFrac = v }
+                                onDraggingChanged: {
+                                    if (dragging) mp.seeking = true
+                                    else if (mp.seeking) { mp.seekTo(mp.seekFrac); mp.seeking = false }
                                 }
-                            }
-
-                            Rectangle {
-                                id: seekKnob
-                                width: mp.seeking ? 2.5 : 4
-                                height: prog.hot ? 20 : 16
-                                radius: width / 2
-                                color: mp.colAccent
-                                x: prog.cx - width / 2
-                                y: (parent.height - height) / 2
-                                opacity: mp.hasPlayer ? 1.0 : 0.0
-
-                                Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                                Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                             }
 
                             Rectangle {
@@ -954,7 +1080,7 @@ PanelWindow {
                                 width: tipText.implicitWidth + 12
                                 height: 18
                                 radius: 5
-                                x: Math.max(0, Math.min(prog.width - width, pm.mouseX - width / 2))
+                                x: Math.max(0, Math.min(prog.width - width, seekBar.hoverX - width / 2))
                                 y: -height - 2
                                 color: Qt.alpha(mp.colBg, 0.92)
                                 opacity: prog.hot ? 1.0 : 0.0
@@ -971,26 +1097,6 @@ PanelWindow {
                                     font.bold: true
                                     font.family: mp.fontFamily
                                 }
-                            }
-
-                            MouseArea {
-                                id: pm
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: mp.canSeekNow
-                                cursorShape: Qt.PointingHandCursor
-                                onPressed: (m) => {
-                                    mp.seeking = true
-                                    mp.seekFrac = Math.max(0, Math.min(1, m.x / width))
-                                }
-                                onPositionChanged: (m) => {
-                                    if (pressed) mp.seekFrac = Math.max(0, Math.min(1, m.x / width))
-                                }
-                                onReleased: {
-                                    mp.seekTo(mp.seekFrac)
-                                    mp.seeking = false
-                                }
-                                onCanceled: mp.seeking = false
                             }
                         }
 
@@ -1069,127 +1175,21 @@ PanelWindow {
                     }
 
                     // регулятор громкости
-                    Item {
+                    FatSlider {
                         id: volRow
                         width: parent.width
-                        height: 22
-                        opacity: mp.volUsable ? 1.0 : 0.4
-
-                        Rectangle {
-                            id: volBtn
-                            width: 24
-                            height: 22
-                            radius: mp.cr
-                            color: Qt.alpha(mp.colText, vbMa.containsMouse && mp.volUsable ? 0.12 : 0.0)
-
-                            Behavior on color { ColorAnimation { duration: 150 } }
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: mp.volGlyph()
-                                color: mp.volFrac <= 0.001 ? Qt.alpha(mp.colText, 0.5) : mp.colAccent
-                                font.pixelSize: 15
-                                font.family: mp.fontFamily
-
-                                Behavior on color { ColorAnimation { duration: 150 } }
-                            }
-                            MouseArea {
-                                id: vbMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: mp.volUsable
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: mp.toggleMute()
-                            }
-                        }
-
-                        Text {
-                            id: volPct
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 32
-                            horizontalAlignment: Text.AlignRight
-                            text: Math.round(mp.volFrac * 100) + "%"
-                            color: vs.hot ? mp.colAccent : Qt.alpha(mp.colText, 0.6)
-                            font.pixelSize: 10
-                            font.bold: true
-                            font.family: mp.fontFamily
-
-                            Behavior on color { ColorAnimation { duration: 140 } }
-                        }
-
-                        Item {
-                            id: vs
-                            anchors.left: volBtn.right
-                            anchors.leftMargin: 6
-                            anchors.right: volPct.left
-                            anchors.rightMargin: 6
-                            height: parent.height
-
-                            readonly property bool hot: mp.volUsable && (vm.containsMouse || mp.volDrag)
-                            property real thick: hot ? 5 : 4
-                            readonly property real gap: 6
-                            property real vf: mp.volFrac
-                            readonly property real cx: Math.max(2, Math.min(width - 2, vf * width))
-
-                            Behavior on vf {
-                                enabled: !mp.volDrag
-                                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
-                            }
-
-                            Behavior on thick { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
-                            Rectangle {
-                                x: 0
-                                y: (parent.height - height) / 2
-                                width: Math.max(0, vs.cx - vs.gap)
-                                height: vs.thick
-                                radius: height / 2
-                                color: mp.colAccent
-                                visible: width > 0.5
-                            }
-
-                            Rectangle {
-                                x: vs.cx + vs.gap
-                                y: (parent.height - height) / 2
-                                width: Math.max(0, vs.width - x)
-                                height: vs.thick
-                                radius: height / 2
-                                color: Qt.alpha(mp.colText, 0.2)
-                                visible: width > 0.5
-                            }
-
-                            Rectangle {
-                                width: mp.volDrag ? 2.5 : 4
-                                height: vs.hot ? 20 : 16
-                                radius: width / 2
-                                color: mp.colAccent
-                                x: vs.cx - width / 2
-                                y: (parent.height - height) / 2
-
-                                Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                                Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                            }
-
-                            MouseArea {
-                                id: vm
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: mp.volUsable
-                                cursorShape: Qt.PointingHandCursor
-                                onPressed: (m) => {
-                                    mp.volDrag = true
-                                    mp.setVolume(m.x / width)
-                                }
-                                onPositionChanged: (m) => { if (pressed) mp.setVolume(m.x / width) }
-                                onReleased: mp.volDrag = false
-                                onCanceled: mp.volDrag = false
-                                onWheel: (w) => {
-                                    mp.volStep(w.angleDelta.y > 0 ? 0.05 : -0.05)
-                                    w.accepted = true
-                                }
-                            }
-                        }
+                        glyph: mp.volGlyph()
+                        value: mp.volFrac
+                        usable: mp.volUsable
+                        colAccent: mp.colAccent
+                        colText: mp.colText
+                        colBg: mp.colBg
+                        fontFamily: mp.fontFamily
+                        radius: mp.cr
+                        onMoved: (v) => mp.setVolume(v)
+                        onDraggingChanged: mp.volDrag = dragging
+                        onGlyphClicked: mp.toggleMute()
+                        onWheeled: (dir) => mp.volStep(dir * 0.05)
                     }
 
                     Rectangle {
@@ -1535,9 +1535,11 @@ PanelWindow {
                                         // при выборе мода — волной слева направо (по 22 мс на полосу)
                                         property real shown: g
                                         readonly property real frac: (shown + mp.eq.eqRange) / (2 * mp.eq.eqRange)
+                                        readonly property string dbText: Math.abs(shown) < 0.05 ? "0"
+                                            : (shown > 0 ? "+" : "") + (Math.round(shown * 10) / 10)
 
                                         Behavior on shown {
-                                            enabled: !bm.pressed
+                                            enabled: !slot.dragging
                                             SequentialAnimation {
                                                 PauseAnimation { duration: mp.presetAnim ? band.index * 22 : 0 }
                                                 NumberAnimation {
@@ -1551,75 +1553,50 @@ PanelWindow {
                                         width: bands.width / 10
                                         height: bands.height
 
-                                        Item {
+                                        // вертикальная полоска с водой: низ = -eqRange, верх = +eqRange, dB по центру
+                                        FatSlider {
                                             id: slot
+                                            vertical: true
                                             anchors.top: parent.top
                                             anchors.topMargin: 2
                                             anchors.bottom: fLabel.top
                                             anchors.bottomMargin: 4
                                             anchors.left: parent.left
+                                            anchors.leftMargin: 2
                                             anchors.right: parent.right
+                                            anchors.rightMargin: 2
 
-                                            // сегментная шкала: центральный сегмент = 0 dB,
-                                            // выше — буст, ниже — срез (такие же чёрточки как в кольце вокруг обложки)
-                                            readonly property int half: 7
-                                            readonly property int n: half * 2 + 1
-                                            readonly property real pitch: height / n
-                                            readonly property real sh: Math.max(2, pitch - 2.6)
-                                            readonly property int steps: Math.round((band.frac * 2 - 1) * half)
-                                            readonly property bool hot: bm.pressed || bm.containsMouse
+                                            value: band.frac
+                                            label: band.dbText
+                                            textPx: 9
+                                            colAccent: mp.colAccent
+                                            colText: mp.colText
+                                            colBg: mp.colBg
+                                            fontFamily: mp.fontFamily
+                                            radius: mp.cr
 
-                                            Repeater {
-                                                model: slot.n
-
-                                                Rectangle {
-                                                    required property int index
-                                                    readonly property int d: slot.half - index
-                                                    readonly property bool zero: d === 0
-                                                    readonly property bool tip: d === slot.steps
-                                                    readonly property bool lit: slot.steps > 0 ? (d >= 1 && d <= slot.steps)
-                                                                              : (slot.steps < 0 ? (d <= -1 && d >= slot.steps) : false)
-
-                                                    width: (zero ? 14 : 10) + (slot.hot ? 2 : 0)
-                                                    height: slot.sh
-                                                    radius: height / 2
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    y: index * slot.pitch + (slot.pitch - height) / 2
-
-                                                    color: (lit || (zero && slot.steps === 0))
-                                                           ? (tip ? mp.colAccent : Qt.alpha(mp.colAccent, 0.5))
-                                                           : (zero ? Qt.alpha(mp.colText, 0.45)
-                                                                   : Qt.alpha(mp.colText, slot.hot ? 0.2 : 0.12))
-
-                                                    Behavior on color { ColorAnimation { duration: 110 } }
-                                                    Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                                                }
+                                            onMoved: (v) => mp.eq.setGain(band.index, (v * 2 - 1) * mp.eq.eqRange)
+                                            onWheeled: (dir) => mp.eq.setGain(band.index, band.g + dir * 0.5)
+                                            onDoubleClicked: mp.eq.setGain(band.index, 0)
+                                            onHoveredChanged: {
+                                                if (hovered) mp.eqHover = band.index
+                                                else if (mp.eqHover === band.index) mp.eqHover = -1
                                             }
 
-                                            MouseArea {
-                                                id: bm
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-
-                                                function update(my) {
-                                                    const f = 1 - Math.max(0, Math.min(1, my / slot.height))
-                                                    mp.eq.setGain(band.index, (f * 2 - 1) * mp.eq.eqRange)
-                                                }
-
-                                                onContainsMouseChanged: {
-                                                    if (containsMouse) mp.eqHover = band.index
-                                                    else if (mp.eqHover === band.index) mp.eqHover = -1
-                                                }
-
-                                                onPressed: (m) => update(m.y)
-                                                onPositionChanged: (m) => { if (pressed) update(m.y) }
-                                                onDoubleClicked: mp.eq.setGain(band.index, 0)
-
-                                                onWheel: (w) => {
-                                                    mp.eq.setGain(band.index, band.g + (w.angleDelta.y > 0 ? 0.5 : -0.5))
-                                                    w.accepted = true
-                                                }
+                                            // метка 0 dB: две короткие чёрточки по краям, текст по центру не перекрывают
+                                            Rectangle {
+                                                x: 0
+                                                y: (parent.height - height) / 2
+                                                width: 4
+                                                height: 1.5
+                                                color: Qt.alpha(mp.colText, 0.5)
+                                            }
+                                            Rectangle {
+                                                x: parent.width - width
+                                                y: (parent.height - height) / 2
+                                                width: 4
+                                                height: 1.5
+                                                color: Qt.alpha(mp.colText, 0.5)
                                             }
                                         }
 

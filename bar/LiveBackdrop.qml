@@ -67,7 +67,9 @@ Item {
     // режим захвата: live (кадры идут постоянно) или по запросу с заморозкой
     property bool liveCapture: true
     property bool parkOthers: true
-    property real texScale: 1.0
+    // масштаб текстуры сцены: блюр всё равно мылит картинку, а полное разрешение стоит в 4 раза дороже
+    // (отрисовка сцены, мипмапы, выборки шейдера). Если в Visual.qml texScale задан явно - он главнее
+    property real texScale: 0.5
     property int wsDelay: 0
     property int settleMs: 900
     property bool settling: false
@@ -600,6 +602,13 @@ Item {
         aliveCount = nAlive
 
         hasFloat = floatSeen
+        let layoutSig = wsNow + "|" + spId
+        for (const a in out) {
+            const o = out[a]
+            layoutSig += "|" + a + ":" + o.x + "," + o.y + "," + o.w + "," + o.h + "," + o.z + "," + (o.alive ? 1 : 0)
+        }
+        const sameLayout = layoutSig === lastLayoutSig && !changed && !spChanged
+        lastLayoutSig = layoutSig
         if (debug) console.warn("[LB dbg] roi", Math.round(roi.x), Math.round(roi.y), Math.round(roi.width), Math.round(roi.height),
                                "| ws", wsNow, "| окон в области:", dbgSeen.length, JSON.stringify(dbgSeen),
                                "| toplevels Wayland:", tops.length)
@@ -645,7 +654,7 @@ Item {
             })
         }
         if (!pruneTimer.running) pruneTimer.start()
-        tex.scheduleUpdate()
+        if (!sameLayout) tex.scheduleUpdate()
     }
 
     // чистит из модели окна, которые давно уехали и закрылись
@@ -692,6 +701,10 @@ Item {
         function onRawEvent(event) {
             if (event.name === "configreloaded") root.loadAnim()
 
+            // на эти события раскладка окон не меняется (заголовки у терминалов/браузеров меняются постоянно)
+            if (event.name === "windowtitle" || event.name === "windowtitlev2"
+                || event.name === "bell" || event.name === "screencast") return
+
             const wsEv = event.name === "workspace" || event.name === "workspacev2"
                 || event.name === "focusedmon" || event.name === "focusedmonv2"
                 || event.name === "activespecial" || event.name === "activespecialv2"
@@ -703,6 +716,8 @@ Item {
     }
 
     // сигнатура последних найденных обоев (путь + время изменения), чтобы не перезагружать зря
+    // подпись раскладки окон из прошлого parse(): если не изменилась, текстуру заново не рисуем
+    property string lastLayoutSig: ""
     property string lastSig: ""
     property int reloadTick: 0
 

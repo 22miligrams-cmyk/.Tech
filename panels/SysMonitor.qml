@@ -24,6 +24,21 @@ PanelWindow {
 
     property var anchorRect: ({ x: 0, y: 0, w: 0, h: 0, lo: 0, hi: 0 })
 
+    // эффект глубины: содержимое панели наклоняется и сдвигается за курсором (Visual.qml: parallaxAllowed).
+    // стекло панели не двигается: оно приросло к бару и обрезается по его краю, поэтому крутится только контент
+    property bool parallaxAllowed: true
+    property real camShiftX: 5
+    property real camShiftY: 4
+    property real camTilt: 3.0
+    readonly property real camTargetX: (parallaxAllowed && camHover.hovered && panel.width > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.x / panel.width)) * 2 - 1 : 0
+    readonly property real camTargetY: (parallaxAllowed && camHover.hovered && panel.height > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.y / panel.height)) * 2 - 1 : 0
+    property real camX: camTargetX
+    property real camY: camTargetY
+    Behavior on camX { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+    Behavior on camY { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+
     readonly property string fontFamily: "JetBrainsMono Nerd Font, Monospace"
     readonly property color warmColor: "#fab387"
     readonly property color hotColor: "#f38ba8"
@@ -221,8 +236,15 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
     readonly property bool horiz: side === "top" || side === "bottom"
     readonly property real pad: 14
     readonly property real cr: 6
-    readonly property real pw: horiz ? Math.max(370, anchorRect.w) : 370
-    readonly property real ph: Math.min(body.implicitHeight + pad * 2, height - 100)
+    readonly property real edge: 16
+    readonly property real pw: Math.min(horiz ? Math.max(370, anchorRect.w) : body.contentW + pad * 2, width - 16)
+    // на боковом баре высота панели = длина блока (не меньше 160), а карточки уходят в соседние колонки:
+    // панель растёт вширь, а не вверх и не в прокрутку. На нижнем/верхнем баре одна колонка, высота по содержимому
+    readonly property real fullH: body.implicitHeight + pad * 2
+    readonly property real ph: Math.min(horiz ? fullH : Math.max(anchorRect.h, 160), height - 16)
+    // отступ от края экрана: 16, а если панель на всю длину бара - 8, чтобы совпасть с его краями
+    readonly property real edgeX: pw >= width - 16.5 ? 8 : edge
+    readonly property real edgeY: ph >= height - 16.5 ? 8 : edge
 
     function clamp(v, lo, hi) {
         return Math.max(lo, Math.min(v, hi))
@@ -233,11 +255,11 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
 
     readonly property real px: side === "left" ? anchorRect.x + anchorRect.w + gapNow
         : side === "right" ? anchorRect.x - pw - gapNow
-        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, 8, width - 8 - pw)
+        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, edgeX, width - edgeX - pw)
 
     readonly property real py: side === "bottom" ? anchorRect.y - ph - gapNow
         : side === "top" ? anchorRect.y + anchorRect.h + gapNow
-        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, 8, height - 8 - ph)
+        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, edgeY, height - edgeY - ph)
 
     function sq(v) {
         if (!fused) return false
@@ -312,6 +334,8 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
         font.pixelSize: px
         font.bold: true
         font.family: "JetBrainsMono Nerd Font, Monospace"
+
+        Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
     }
 
     component IconLbl: Row {
@@ -322,6 +346,8 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
         property real iconDim: 1.3
         spacing: 6
 
+        Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
+
         Icon {
             name: il.icon
             size: 14
@@ -330,30 +356,19 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        Lbl { text: il.text; color: il.color }
+        Text {
+            text: il.text
+            color: il.color
+            font.pixelSize: 11
+            font.bold: true
+            font.family: "JetBrainsMono Nerd Font, Monospace"
+        }
     }
 
-    component Meter: Item {
-        property real value: 0
-        property color fill
-        property color track
-        height: 6
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 3
-            color: parent.track
-
-
-            Rectangle {
-                width: parent.width * Math.max(0, Math.min(1, parent.parent.value))
-                height: parent.height
-                radius: 3
-                color: parent.parent.fill
-
-                Behavior on width { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
-            }
-        }
+    // индикатор с водой (common/WaterBar.qml): value 0..1, fill - цвет воды, track - дорожка
+    component Meter: WaterBar {
+        height: 10
+        radius: 4
     }
 
     component Card: Rectangle {
@@ -362,6 +377,8 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
         radius: 6
         color: tint
         implicitHeight: col.implicitHeight + 20
+
+        Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
 
         Column {
             id: col
@@ -450,10 +467,14 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
 
                 color: mon.colGlass
 
+                Behavior on color { ColorAnimation { duration: 400 } }
+
                 topLeftRadius: ((mon.side === "top" && mon.sq(mon.px)) || (mon.side === "left" && mon.sq(mon.py))) ? 0 : mon.cr
                 topRightRadius: ((mon.side === "top" && mon.sq(mon.px + mon.pw)) || (mon.side === "right" && mon.sq(mon.py))) ? 0 : mon.cr
                 bottomLeftRadius: ((mon.side === "bottom" && mon.sq(mon.px)) || (mon.side === "left" && mon.sq(mon.py + mon.ph))) ? 0 : mon.cr
                 bottomRightRadius: ((mon.side === "bottom" && mon.sq(mon.px + mon.pw)) || (mon.side === "right" && mon.sq(mon.py + mon.ph))) ? 0 : mon.cr
+
+                HoverHandler { id: camHover }
 
                 MouseArea {
                     anchors.fill: parent
@@ -462,6 +483,21 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
 
                 Flickable {
                     id: flick
+                    transform: [
+                        Translate { x: -mon.camX * mon.camShiftX; y: -mon.camY * mon.camShiftY },
+                        Rotation {
+                            origin.x: flick.width / 2
+                            origin.y: flick.height / 2
+                            axis { x: 0; y: 1; z: 0 }
+                            angle: mon.camX * mon.camTilt
+                        },
+                        Rotation {
+                            origin.x: flick.width / 2
+                            origin.y: flick.height / 2
+                            axis { x: 1; y: 0; z: 0 }
+                            angle: -mon.camY * mon.camTilt
+                        }
+                    ]
                     x: mon.pad
                     y: mon.pad
                     width: parent.width - mon.pad * 2
@@ -471,56 +507,58 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    Column {
+                    // Карточки раскладываются колонками сверху вниз. На нижнем/верхнем баре колонка одна,
+                    // на боковом - когда карточки не влезают в высоту блока, начинается новая колонка (панель растёт вширь)
+                    Item {
                         id: body
-                        width: flick.width
-                        spacing: 8
+                        width: contentW
+                        height: contentH
+                        implicitWidth: contentW
+                        implicitHeight: contentH
+
+                        readonly property real gap: 8
+                        readonly property real colW: mon.horiz ? mon.pw - mon.pad * 2 : 340
+                        readonly property real availH: flick.height
+                        property real contentW: colW
+                        property real contentH: 0
 
                         readonly property color cardTint: Qt.alpha(mon.colText, 0.06)
                         readonly property color dim: Qt.alpha(mon.colText, 0.55)
                         readonly property color track: Qt.alpha(mon.colText, 0.14)
 
-                        Item {
-                            width: parent.width
-                            height: 28
-
-                            Row {
-                                spacing: 10
-
-                                Rectangle {
-                                    width: 28
-                                    height: 28
-                                    radius: mon.cr
-                                    color: mon.colSecondary
-
-                                    Icon {
-                                        anchors.centerIn: parent
-                                        name: "ram"
-                                        size: 15
-                                        color: mon.colAccent
-                                        dim: 1.3
-                                    }
+                        function relayout() {
+                            const items = [cCpu, cGpu, cRam, cFans, tempCard, cDisk]
+                            const H = mon.horiz ? 1e9 : Math.max(availH, 1)
+                            let x = 0, y = 0, col = 0, maxH = 0
+                            for (let i = 0; i < items.length; i++) {
+                                const it = items[i]
+                                if (!it.visible) continue
+                                const h = it.height
+                                if (y > 0 && y + h > H + 0.5) {
+                                    x += colW + gap
+                                    y = 0
+                                    col++
                                 }
-
-                                Lbl {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: tr("sys.title")
-                                    px: 15
-                                    color: mon.colText
-                                }
+                                it.x = x
+                                it.y = y
+                                y += h + gap
+                                maxH = Math.max(maxH, y - gap)
                             }
-
-                            IconLbl {
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                icon: "clock12"
-                                text: mon.fmtUptime(mon.uptime)
-                                color: body.dim
-                                iconDim: 1.0
-                            }
+                            contentW = (col + 1) * colW + col * gap
+                            contentH = maxH
                         }
+
+                        // любое изменение высот/видимости карточек или доступной высоты - пересчитать колонки
+                        readonly property string layoutSig: [availH, colW, mon.horiz,
+                            cCpu.visible, cCpu.height, cGpu.visible, cGpu.height,
+                            cRam.visible, cRam.height, cFans.visible, cFans.height,
+                            tempCard.visible, tempCard.height, cDisk.visible, cDisk.height].join("|")
+                        onLayoutSigChanged: Qt.callLater(relayout)
+                        Component.onCompleted: relayout()
+
                         Card {
-                            width: parent.width
+                            id: cCpu
+                            width: body.colW
                             tint: body.cardTint
 
                             Item {
@@ -562,28 +600,26 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                                 spacing: 2
                                 visible: mon.cores.length > 0
 
+                                // модель - число ядер, а не сам массив: массив приходит новым при каждом опросе,
+                                // и Repeater пересоздавал бы все столбики (уровень начинался бы заново = прыжок)
                                 Repeater {
-                                    model: mon.cores
+                                    model: mon.cores.length
 
                                     Item {
-                                        required property real modelData
+                                        id: coreItem
+                                        required property int index
+                                        readonly property real usage: mon.cores[index] || 0
                                         width: Math.max(2, (coreRow.width - (mon.cores.length - 1) * coreRow.spacing) / mon.cores.length)
                                         height: coreRow.height
 
 
-                                        Rectangle {
+                                        WaterBar {
                                             anchors.fill: parent
-                                            radius: 2
-                                            color: body.track
-                                        }
-                                        Rectangle {
-                                            anchors.bottom: parent.bottom
-                                            width: parent.width
-                                            height: Math.max(2, parent.height * parent.modelData / 100)
-                                            radius: 2
-                                            color: parent.modelData > 85 ? mon.hotColor : mon.colAccent
-
-                                            Behavior on height { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+                                            vertical: true
+                                            radius: 3
+                                            value: coreItem.usage / 100
+                                            fill: coreItem.usage > 85 ? mon.hotColor : mon.colAccent
+                                            track: body.track
                                         }
                                     }
                                 }
@@ -593,29 +629,36 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                                 width: parent.width
 
                                 KV {
-                                    width: parent.width / 3
+                                    width: parent.width * 0.22
                                     k: tr("sys.freq")
                                     v: mon.cpuMhz > 0 ? (mon.cpuMhz / 1000).toFixed(2) + " GHz" : "—"
                                     kc: body.dim; vc: mon.colText
                                 }
                                 KV {
-                                    width: parent.width / 3
+                                    width: parent.width * 0.18
                                     k: tr("sys.cores")
                                     v: mon.cores.length > 0 ? String(mon.cores.length) : "—"
                                     kc: body.dim; vc: mon.colText
                                 }
                                 KV {
-                                    width: parent.width / 3
+                                    width: parent.width * 0.34
                                     k: "Load avg"
                                     v: mon.load !== "" ? mon.load : "—"
+                                    kc: body.dim; vc: mon.colText
+                                }
+                                KV {
+                                    width: parent.width * 0.26
+                                    k: "Uptime"
+                                    v: mon.fmtUptime(mon.uptime)
                                     kc: body.dim; vc: mon.colText
                                 }
                             }
                         }
 
                         Card {
+                            id: cGpu
                             visible: mon.gpu !== null
-                            width: parent.width
+                            width: body.colW
                             tint: body.cardTint
 
                             Item {
@@ -705,7 +748,8 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                         }
 
                         Card {
-                            width: parent.width
+                            id: cRam
+                            width: body.colW
                             tint: body.cardTint
 
                             Item {
@@ -743,18 +787,20 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                         }
 
                         Card {
+                            id: cFans
                             visible: mon.fans.length > 0 || (mon.gpu !== null && mon.gpu.fan >= 0)
-                            width: parent.width
+                            width: body.colW
                             tint: body.cardTint
 
                             IconLbl { icon: "fan"; text: tr("sys.fans"); color: mon.colAccent }
 
                             Repeater {
-                                model: mon.fans
+                                model: mon.fans.length
 
                                 Column {
                                     id: fanItem
-                                    required property var modelData
+                                    required property int index
+                                    readonly property var fan: mon.fans[index] || ({ chip: "", label: "", rpm: 0 })
                                     width: parent.width
                                     spacing: 3
 
@@ -767,21 +813,21 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                                             px: 10
                                             color: mon.colText
                                             elide: Text.ElideRight
-                                            text: /^fan\d+$/.test(fanItem.modelData.label)
-                                                  ? fanItem.modelData.chip + " " + fanItem.modelData.label.replace("fan", "#")
-                                                  : fanItem.modelData.label
+                                            text: /^fan\d+$/.test(fanItem.fan.label)
+                                                  ? fanItem.fan.chip + " " + fanItem.fan.label.replace("fan", "#")
+                                                  : fanItem.fan.label
                                         }
                                         Lbl {
                                             anchors.right: parent.right
                                             px: 10
-                                            color: fanItem.modelData.rpm > 0 ? mon.colText : body.dim
-                                            text: fanItem.modelData.rpm + " RPM"
+                                            color: fanItem.fan.rpm > 0 ? mon.colText : body.dim
+                                            text: fanItem.fan.rpm + " RPM"
                                         }
                                     }
                                     Meter {
                                         width: parent.width
-                                        height: 4
-                                        value: fanItem.modelData.rpm / 3000
+                                        height: 8
+                                        value: fanItem.fan.rpm / 3000
                                         fill: mon.colAccent
                                         track: body.track
                                     }
@@ -808,7 +854,7 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
 
                                 Meter {
                                     width: parent.width
-                                    height: 4
+                                    height: 8
                                     value: mon.gpu ? mon.gpu.fan / 100 : 0
                                     fill: mon.colAccent
                                     track: body.track
@@ -819,7 +865,7 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                             id: tempCard
                             readonly property var items: mon.otherTemps()
                             visible: items.length > 0
-                            width: parent.width
+                            width: body.colW
                             tint: body.cardTint
 
                             IconLbl { icon: "temp"; text: tr("sys.temps"); color: mon.colAccent }
@@ -835,7 +881,7 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
 
                                     Item {
                                         required property var modelData
-                                        width: (body.width - 20 - 12) / 2
+                                        width: (body.colW - 20 - 12) / 2
                                         height: 14
 
                                         Lbl {
@@ -857,8 +903,9 @@ nvidia-smi -i 0 --query-gpu=name,utilization.gpu,temperature.gpu,fan.speed,memor
                         }
 
                         Card {
+                            id: cDisk
                             visible: mon.diskSize > 0
-                            width: parent.width
+                            width: body.colW
                             tint: body.cardTint
 
                             Item {

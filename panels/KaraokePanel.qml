@@ -34,6 +34,24 @@ PanelWindow {
     readonly property string fontFamily: "JetBrainsMono Nerd Font, Monospace"
     readonly property real cr: 6
 
+    // ── параллакс: фон-обложка, визуализатор и боковая карточка лежат на разной глубине.
+    // Сам текст не трогаем — он остаётся чётким. parallax приходит из LyricsPanel (общий выключатель),
+    // свой переключатель — в настройках сбоку (cfg.parallax).
+    property bool parallax: true
+    readonly property bool plx: parallax && (!cfg || cfg.parallax !== false)
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(v, hi)) }
+
+    // курсор относительно центра экрана, -1..1
+    readonly property real lookTX: plx && hov.hovered ? clamp((hov.point.position.x - width / 2) / (width / 2), -1, 1) : 0
+    readonly property real lookTY: plx && hov.hovered ? clamp((hov.point.position.y - height / 2) / (height / 2), -1, 1) : 0
+    // общий сдвиг текста лирики (целые пиксели, чтобы крупный текст не мылился)
+    readonly property int textDX: Math.round(-lookX * 30)
+    readonly property int textDY: Math.round(-lookY * 18)
+    property real lookX: lookTX
+    property real lookY: lookTY
+    Behavior on lookX { SpringAnimation { spring: 2.6; damping: 0.32; epsilon: 0.002 } }
+    Behavior on lookY { SpringAnimation { spring: 2.6; damping: 0.32; epsilon: 0.002 } }
+
     readonly property var player: lyr ? lyr.player : null
     readonly property string status: lyr ? lyr.status : "idle"
     readonly property bool playing: player !== null && player !== undefined
@@ -324,6 +342,7 @@ PanelWindow {
         scale: 0.985 + 0.015 * vp.p
 
         HoverHandler {
+            id: hov
             cursorShape: vp.uiShown ? Qt.ArrowCursor : Qt.BlankCursor
             onPointChanged: vp.poke()
         }
@@ -346,7 +365,11 @@ PanelWindow {
 
         Image {
             id: art
-            anchors.fill: parent
+            // чуть больше экрана, чтобы при сдвиге не показывались края
+            width: parent.width * 1.14
+            height: parent.height * 1.14
+            x: (parent.width - width) / 2 + vp.lookX * 34
+            y: (parent.height - height) / 2 + vp.lookY * 24
             source: vp.player && vp.player.trackArtUrl ? vp.player.trackArtUrl : ""
             fillMode: Image.PreserveAspectCrop
             sourceSize: Qt.size(160, 160)
@@ -381,6 +404,8 @@ PanelWindow {
             height: parent.height * 0.4
             spacing: 6
             visible: vp.cfg.viz
+            // средний слой: уезжает против курсора
+            transform: Translate { x: -vp.lookX * 22; y: -vp.lookY * 12 }
 
             Repeater {
                 model: 20
@@ -532,6 +557,8 @@ PanelWindow {
 
                     width: list.width
                     height: lineText.implicitHeight + 28
+                    // параллакс: одно и то же значение у всех строк, чтобы двигались синхронно
+                    transform: Translate { x: vp.textDX; y: vp.textDY }
 
                     KaraokeLine {
                         id: lineText
@@ -719,6 +746,8 @@ PanelWindow {
             border.width: 1
             border.color: Qt.alpha(vp.colText, 0.08)
             opacity: vp.uiShown || sideHover.hovered ? 1 : 0
+            // ближний слой: смещение целыми пикселями, чтобы текст не мылился
+            transform: Translate { x: Math.round(-vp.lookX * 6); y: Math.round(-vp.lookY * 5) }
 
             Behavior on x { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
             Behavior on opacity { NumberAnimation { duration: 300 } }
@@ -784,6 +813,14 @@ PanelWindow {
                     label: vp.t("karaoke.words", "Word highlight")
                     checked: vp.cfg.wordHL
                     onToggled: vp.cfg.wordHL = !vp.cfg.wordHL
+                }
+
+                ToggleRow {
+                    th: vp
+                    width: parent.width
+                    label: vp.t("karaoke.parallax", "Parallax")
+                    checked: vp.cfg.parallax
+                    onToggled: vp.cfg.parallax = !vp.cfg.parallax
                 }
 
                 Item { width: 1; height: 6 }

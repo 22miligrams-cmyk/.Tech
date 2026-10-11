@@ -68,7 +68,9 @@ Item {
 
         readonly property var bs: modelData.bs ? modelData.bs() : null
         readonly property bool subShown: isCurrent && bs !== null && bs.subOpenId === modelData.id
-        readonly property real subExtra: modelData.sub ? modelData.sub.length * 36 + 20 : 0
+        // строки подменю плотнее, когда пунктов много (карточка «Параллакс»)
+        readonly property real rowH: (modelData.sub && modelData.sub.length > 7) ? 26 : 36
+        readonly property real subExtra: modelData.sub ? modelData.sub.length * rowH + 20 : 0
         property real extra: subShown ? subExtra : 0
         Behavior on extra { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
@@ -323,7 +325,7 @@ Item {
                                     readonly property bool sel: cardContainer.subShown && cardContainer.bs.subIndex === index
 
                                     width: subCol.width
-                                    height: 36
+                                    height: cardContainer.rowH
                                     radius: 10
                                     color: sel ? Qt.rgba(0, 0, 0, 0.28) : "transparent"
                                     Behavior on color { ColorAnimation { duration: 100 } }

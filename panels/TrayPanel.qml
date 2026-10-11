@@ -88,7 +88,10 @@ PanelWindow {
     property real blurDim: 0.12
 
     // эффект камеры: панель чуть двигается и наклоняется за мышкой (как в BtMenu)
-    property bool camEffect: true            // потом можно привязать к barLayout.camEffect из Visual.qml
+    property var barLayout: null             // Visual.qml: TrayPanel { barLayout: barLayout }
+    // разрешает эффект камеры именно этой панели (Visual.qml: общий параллакс && свой пункт карточки «Параллакс»)
+    property bool parallaxAllowed: true
+    readonly property bool camEffect: parallaxAllowed
     readonly property bool camOn: camEffect
     property real camStrength: 1.0
     property real camMoveX: 50

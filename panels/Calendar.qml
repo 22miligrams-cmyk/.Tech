@@ -33,6 +33,21 @@ PanelWindow {
 
     property var anchorRect: ({ x: 0, y: 0, w: 0, h: 0, lo: 0, hi: 0 })
 
+    // эффект глубины: содержимое панели наклоняется и сдвигается за курсором (Visual.qml: parallaxAllowed).
+    // стекло панели не двигается: оно приросло к бару и обрезается по его краю, поэтому крутится только контент
+    property bool parallaxAllowed: true
+    property real camShiftX: 5
+    property real camShiftY: 4
+    property real camTilt: 3.0
+    readonly property real camTargetX: (parallaxAllowed && camHover.hovered && panel.width > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.x / panel.width)) * 2 - 1 : 0
+    readonly property real camTargetY: (parallaxAllowed && camHover.hovered && panel.height > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.y / panel.height)) * 2 - 1 : 0
+    property real camX: camTargetX
+    property real camY: camTargetY
+    Behavior on camX { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+    Behavior on camY { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+
     readonly property string fontFamily: "JetBrainsMono Nerd Font, Monospace"
     readonly property var monthNames: Tr.list("cal.months")
     readonly property var monthGen: Tr.list("cal.monthsGen")
@@ -99,8 +114,13 @@ PanelWindow {
     readonly property bool horiz: side === "top" || side === "bottom"
     readonly property real pad: 14
     readonly property real cr: 6
-    readonly property real pw: horiz ? Math.max(280, anchorRect.w) : 280
-    readonly property real ph: body.implicitHeight + pad * 2
+    readonly property real edge: 16
+    readonly property real pw: Math.min(horiz ? Math.max(280, anchorRect.w) : 280, width - 16)
+    // на боковом баре высота считается по длине блока, как ширина на нижнем (но не меньше содержимого)
+    readonly property real ph: Math.min(horiz ? body.implicitHeight + pad * 2 : Math.max(body.implicitHeight + pad * 2, anchorRect.h), height - 16)
+    // отступ от края экрана: 16, а если панель на всю длину бара - 8, чтобы совпасть с его краями
+    readonly property real edgeX: pw >= width - 16.5 ? 8 : edge
+    readonly property real edgeY: ph >= height - 16.5 ? 8 : edge
     readonly property real cellW: Math.floor((pw - pad * 2) / 7)
     readonly property real cellH: 32
     readonly property real rowGap: 2
@@ -128,11 +148,11 @@ PanelWindow {
 
     readonly property real px: side === "left" ? anchorRect.x + anchorRect.w + gapNow
         : side === "right" ? anchorRect.x - pw - gapNow
-        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, 8, width - 8 - pw)
+        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, edgeX, width - edgeX - pw)
 
     readonly property real py: side === "bottom" ? anchorRect.y - ph - gapNow
         : side === "top" ? anchorRect.y + anchorRect.h + gapNow
-        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, 8, height - 8 - ph)
+        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, edgeY, height - edgeY - ph)
 
     function sq(v) {
         return fused && v >= anchorRect.lo - 0.5 && v <= anchorRect.hi + 0.5
@@ -604,6 +624,8 @@ PanelWindow {
                 bottomLeftRadius: ((cal.side === "bottom" && cal.sq(cal.px)) || (cal.side === "left" && cal.sq(cal.py + cal.ph))) ? 0 : cal.cr
                 bottomRightRadius: ((cal.side === "bottom" && cal.sq(cal.px + cal.pw)) || (cal.side === "right" && cal.sq(cal.py + cal.ph))) ? 0 : cal.cr
 
+                HoverHandler { id: camHover }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: (mouse) => {
@@ -619,6 +641,21 @@ PanelWindow {
 
                 Column {
                     id: body
+                    transform: [
+                        Translate { x: -cal.camX * cal.camShiftX; y: -cal.camY * cal.camShiftY },
+                        Rotation {
+                            origin.x: body.width / 2
+                            origin.y: body.height / 2
+                            axis { x: 0; y: 1; z: 0 }
+                            angle: cal.camX * cal.camTilt
+                        },
+                        Rotation {
+                            origin.x: body.width / 2
+                            origin.y: body.height / 2
+                            axis { x: 1; y: 0; z: 0 }
+                            angle: -cal.camY * cal.camTilt
+                        }
+                    ]
                     y: cal.pad
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: cal.cellW * 7

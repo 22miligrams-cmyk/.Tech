@@ -25,6 +25,21 @@ PanelWindow {
 
     property bool liveThumbs: false
 
+    // эффект камеры: сцена двигается и наклоняется за мышкой (как в настройках). Visual.qml: parallaxAllowed
+    property bool parallaxAllowed: true
+    property real camStrength: 1.0
+    property real camMoveX: 50
+    property real camMoveY: 28
+    property real camTilt: 3.5
+    readonly property real camTargetX: (parallaxAllowed && camHover.hovered && width > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.x / width)) * 2 - 1 : 0
+    readonly property real camTargetY: (parallaxAllowed && camHover.hovered && height > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.y / height)) * 2 - 1 : 0
+    property real camX: camTargetX
+    property real camY: camTargetY
+    Behavior on camX { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+    Behavior on camY { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+
     property bool isClosing: false
     property real reveal: 0.0
     property int selected: 1
@@ -201,6 +216,12 @@ PanelWindow {
         opacity: wsMenu.reveal * 0.6
     }
 
+    Item {
+        id: camSurface
+        anchors.fill: parent
+        HoverHandler { id: camHover }
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: wsMenu.close()
@@ -238,6 +259,25 @@ PanelWindow {
         height: parent.height
         y: (1 - wsMenu.reveal) * 16
         opacity: wsMenu.reveal
+
+        transform: [
+            Translate {
+                x: -wsMenu.camX * wsMenu.camMoveX * wsMenu.camStrength
+                y: -wsMenu.camY * wsMenu.camMoveY * wsMenu.camStrength
+            },
+            Rotation {
+                origin.x: ui.width / 2
+                origin.y: ui.height / 2
+                axis { x: 0; y: 1; z: 0 }
+                angle: wsMenu.camX * wsMenu.camTilt * wsMenu.camStrength
+            },
+            Rotation {
+                origin.x: ui.width / 2
+                origin.y: ui.height / 2
+                axis { x: 1; y: 0; z: 0 }
+                angle: -wsMenu.camY * wsMenu.camTilt * wsMenu.camStrength
+            }
+        ]
 
         Repeater {
             model: wsMenu.count

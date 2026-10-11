@@ -69,6 +69,9 @@ PanelWindow {
     // Updater из Visual.qml: из него карточка «О шелле» берёт версию и статус, а toggleMenu() дёргает тихую проверку
     property var updater: null
 
+    // Visual.qml: из него карточка «Параллакс» берёт parallaxOn / parallaxMpris / parallaxLyrics
+    property var parallax: null
+
     anchors { top: true; bottom: true; left: true; right: true }
     margins { top: 0; bottom: 0; left: 0; right: 0 }
 
@@ -86,7 +89,7 @@ PanelWindow {
     readonly property real blurRadius: blurPx
     property bool blurLive: false
 
-    readonly property bool camOn: barLayout.camEffect !== false
+    readonly property bool camOn: parallax ? (parallax.parallaxOn && parallax.parallaxSettings) : (barLayout.camEffect !== false)
     property real camStrength: 1.0
     property real camMoveX: 50
     property real camMoveY: 28

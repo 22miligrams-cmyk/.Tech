@@ -33,6 +33,12 @@ Rectangle {
     // shown=false - плашка схлопывается и пропадает
     property bool shown: true;  property bool animateColor: true
 
+    // боковой бар: плашка квадратная (высота cellH) и повёрнута обратно, чтобы иконка и бейдж стояли прямо
+    property bool vertical: false
+    // с какой стороны экрана бар: от этого зависит, куда можно выносить бейдж (см. badge)
+    property string barSide: "bottom"
+    property real cellH: 30
+
     // клик по плашке
     signal clicked()
 
@@ -42,14 +48,16 @@ Rectangle {
 
     // ширина в развёрнутом виде, от неё анимируем схлопывание
     readonly property real expandedWidth: captionMode ? 20 + 17 + 6 + captionWidth
-                                         : (badgeMode ? 30 : Math.max(30, row.implicitWidth + 20))
+                                         : (badgeMode ? cellH : Math.max(30, row.implicitWidth + 20))
 
-    height: 30
+    height: cellH
+    rotation: vertical ? -90 : 0
     width: shown ? expandedWidth : 0
     opacity: shown ? 1.0 : 0.0
     visible: opacity > 0
     radius: 6
-    clip: !shown || width < expandedWidth - 0.5
+    // сама плашка не клипует: бейдж торчит за её угол. Обрезаем только содержимое (см. content) на время схлопывания
+    clip: false
     color: glass
 
     // плавные переходы цвета, ширины и прозрачности
@@ -58,106 +66,112 @@ Rectangle {
     Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
     // основной ряд: иконка, капшн, глиф, лейбл (показывается то, что нужно режиму)
-    Row {
-        id: row
-        anchors.centerIn: parent
-        spacing: 6
+    Item {
+        id: content
+        anchors.fill: parent
+        clip: !chip.shown || chip.width < chip.expandedWidth - 0.5
 
-        Icon {
-            visible: chip.svg !== ""
-            name: chip.svg
-            size: 17
-            color: chip.colAccent
-            dim: 1.3
-            anchors.verticalCenter: parent.verticalCenter
+            Row {
+                id: row
+                anchors.centerIn: parent
+                spacing: 6
 
-            Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
-        }
+                Icon {
+                    visible: chip.svg !== ""
+                    name: chip.svg
+                    size: 17
+                    color: chip.colAccent
+                    dim: 1.3
+                    anchors.verticalCenter: parent.verticalCenter
 
-        Item {
-            id: capBox
-            visible: chip.captionMode
-            width: chip.captionWidth
-            height: capText.implicitHeight
-            clip: true
-            anchors.verticalCenter: parent.verticalCenter
-
-            property string shownText: chip.caption
-
-            Text {
-                id: capText
-                width: parent.width
-                text: capBox.shownText
-                elide: Text.ElideRight
-                color: chip.colText
-                font.pixelSize: 11
-                font.bold: true
-                font.family: "JetBrainsMono Nerd Font, Monospace"
-
-                Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
-            }
-
-            // смена текста капшна: старый уезжает вверх и гаснет, новый выезжает снизу
-            SequentialAnimation {
-                id: capAnim
-
-                ParallelAnimation {
-                    NumberAnimation { target: capText; property: "opacity"; to: 0; duration: 110; easing.type: Easing.InQuad }
-                    NumberAnimation { target: capText; property: "y"; to: -capBox.height * 0.5; duration: 110; easing.type: Easing.InQuad }
+                    Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
                 }
 
-                ScriptAction {
-                    script: {
-                        capBox.shownText = chip.caption
-                        capText.y = capBox.height * 0.6
+                Item {
+                    id: capBox
+                    visible: chip.captionMode
+                    width: chip.captionWidth
+                    height: capText.implicitHeight
+                    clip: true
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    property string shownText: chip.caption
+
+                    Text {
+                        id: capText
+                        width: parent.width
+                        text: capBox.shownText
+                        elide: Text.ElideRight
+                        color: chip.colText
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.family: "JetBrainsMono Nerd Font, Monospace"
+
+                        Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
+                    }
+
+                    // смена текста капшна: старый уезжает вверх и гаснет, новый выезжает снизу
+                    SequentialAnimation {
+                        id: capAnim
+
+                        ParallelAnimation {
+                            NumberAnimation { target: capText; property: "opacity"; to: 0; duration: 110; easing.type: Easing.InQuad }
+                            NumberAnimation { target: capText; property: "y"; to: -capBox.height * 0.5; duration: 110; easing.type: Easing.InQuad }
+                        }
+
+                        ScriptAction {
+                            script: {
+                                capBox.shownText = chip.caption
+                                capText.y = capBox.height * 0.6
+                            }
+                        }
+
+                        ParallelAnimation {
+                            NumberAnimation { target: capText; property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: capText; property: "y"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                        }
+                    }
+
+                    // когда caption поменялся: анимируем если можно, иначе просто подменяем текст
+                    Connections {
+                        target: chip
+
+                        function onCaptionChanged() {
+                            if (chip.animateCaption && chip.shown && capBox.visible) {
+                                capAnim.restart()
+                            } else {
+                                capAnim.stop()
+                                capText.opacity = 1
+                                capText.y = 0
+                                capBox.shownText = chip.caption
+                            }
+                        }
                     }
                 }
 
-                ParallelAnimation {
-                    NumberAnimation { target: capText; property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { target: capText; property: "y"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                Text {
+                    visible: chip.svg === ""
+                    text: chip.glyph
+                    color: chip.colAccent
+                    font.pixelSize: 14
+                    font.family: "JetBrainsMono Nerd Font, Monospace"
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
+                }
+
+                Text {
+                    visible: chip.label !== "" && !chip.badgeMode
+                    text: chip.label
+                    color: chip.colText
+                    font.pixelSize: 11
+                    font.bold: true
+                    font.family: "JetBrainsMono Nerd Font, Monospace"
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
                 }
             }
-
-            // когда caption поменялся: анимируем если можно, иначе просто подменяем текст
-            Connections {
-                target: chip
-
-                function onCaptionChanged() {
-                    if (chip.animateCaption && chip.shown && capBox.visible) {
-                        capAnim.restart()
-                    } else {
-                        capAnim.stop()
-                        capText.opacity = 1
-                        capText.y = 0
-                        capBox.shownText = chip.caption
-                    }
-                }
-            }
-        }
-
-        Text {
-            visible: chip.svg === ""
-            text: chip.glyph
-            color: chip.colAccent
-            font.pixelSize: 14
-            font.family: "JetBrainsMono Nerd Font, Monospace"
-            anchors.verticalCenter: parent.verticalCenter
-
-            Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
-        }
-
-        Text {
-            visible: chip.label !== "" && !chip.badgeMode
-            text: chip.label
-            color: chip.colText
-            font.pixelSize: 11
-            font.bold: true
-            font.family: "JetBrainsMono Nerd Font, Monospace"
-            anchors.verticalCenter: parent.verticalCenter
-
-            Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
-        }
     }
 
     // бейдж-счётчик в правом верхнем углу, больше 9 показываем как "9+"
@@ -169,7 +183,10 @@ Rectangle {
         color: chip.colSecondary
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.rightMargin: -3;  anchors.topMargin: -3
+        // бейдж выступает за угол плашки, но только в сторону от панели: панель стыкуется к плашке вплотную
+        // и закрыла бы выступающую часть (слева панель справа от плашки, снизу - над ней)
+        anchors.rightMargin: chip.barSide === "left" ? 0 : -3
+        anchors.topMargin: chip.barSide === "bottom" ? 0 : -3
 
         scale: chip.badgeMode && chip.label !== "" ? 1 : 0
         visible: scale > 0

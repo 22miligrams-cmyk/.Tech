@@ -33,6 +33,63 @@ Item {
 
     property string wallpaper: Quickshell.env("QS_WALLPAPER") || ""
 
+    // параллакс: общий выключатель + точечные по панелям.
+    // parallaxOn = мастер (выкл -> параллакса нет нигде), остальные флаги = отдельные панели:
+    //   Mpris / Lyrics - параллакс обложки и текста, Settings / Clip / Tray / Bt / Lock / Ws - эффект камеры (наклон за мышкой), Calendar / Sys / Volume - лёгкий сдвиг содержимого.
+    // хранится в ~/.cache/quickshell/parallax.json, переключается из терминала:
+    // quickshell ipc -p ~/.tech/shell call shell parallax | parallaxOn | parallaxOff | parallaxToggle <имя>
+    // имена: mpris lyrics settings clip tray bt lock calendar sys volume ws
+    property bool parallaxOn: true
+    property bool parallaxMpris: true
+    property bool parallaxLyrics: true
+    property bool parallaxSettings: true
+    property bool parallaxClip: true
+    property bool parallaxTray: true
+    property bool parallaxBt: true
+    property bool parallaxLock: true
+    property bool parallaxCalendar: true
+    property bool parallaxSys: true
+    property bool parallaxVolume: true
+    property bool parallaxWs: true
+    property bool parallaxLoaded: false
+
+    readonly property var parallaxKeys: ["Mpris", "Lyrics", "Settings", "Clip", "Tray", "Bt", "Lock", "Calendar", "Sys", "Volume", "Ws"]
+
+    // читает / пишет флаг по имени ("Mpris", "clip" и т.д., регистр не важен)
+    function parallaxKey(name) {
+        const n = String(name).toLowerCase()
+        for (const k of parallaxKeys) if (k.toLowerCase() === n) return k
+        return ""
+    }
+    function parallaxGet(name) { const k = parallaxKey(name); return k ? visualRoot["parallax" + k] : false }
+    function parallaxSet(name, v) { const k = parallaxKey(name); if (k) visualRoot["parallax" + k] = v }
+
+    readonly property string parallaxSnapshot: {
+        const o = { on: parallaxOn }
+        for (const k of parallaxKeys) o[k.toLowerCase()] = visualRoot["parallax" + k]
+        return JSON.stringify(o)
+    }
+    onParallaxSnapshotChanged: if (parallaxLoaded) parallaxStore.setText(parallaxSnapshot)
+
+    FileView {
+        id: parallaxStore
+        path: Paths.home + "/.cache/quickshell/parallax.json"
+        printErrors: false
+        atomicWrites: true
+        onLoaded: {
+            try {
+                const o = JSON.parse(parallaxStore.text())
+                if (typeof o.on === "boolean") visualRoot.parallaxOn = o.on
+                for (const k of visualRoot.parallaxKeys) {
+                    const val = o[k.toLowerCase()]
+                    if (typeof val === "boolean") visualRoot["parallax" + k] = val
+                }
+            } catch (e) {}
+            visualRoot.parallaxLoaded = true
+        }
+        onLoadFailed: visualRoot.parallaxLoaded = true
+    }
+
     readonly property string wallpaperPath: bar.wallpaperPath
 
     // открыта ли хоть одна панель
@@ -178,6 +235,7 @@ Item {
 
     Calendar {
         id: calendarComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxCalendar
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx * 0.55
@@ -194,6 +252,7 @@ Item {
 
     SysMonitor {
         id: sysMenuComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxSys
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx * 0.55
@@ -209,6 +268,7 @@ Item {
 
     VolumePanel {
         id: volMenuComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxVolume
         eq: logic
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
@@ -237,6 +297,7 @@ Item {
     LyricsPanel {
         id: lyricsPanelComp
         lyr: lyricsComp
+        parallax: visualRoot.parallaxOn && visualRoot.parallaxLyrics
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx * 0.55
@@ -253,6 +314,7 @@ Item {
     MprisPanel {
         id: mprisPanelComp
         eq: logic
+        parallax: visualRoot.parallaxOn && visualRoot.parallaxMpris
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx * 0.55
@@ -269,6 +331,8 @@ Item {
 
     ClipboardPanel {
         id: clipPanelComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxClip
+        barLayout: barLayout
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx
@@ -281,6 +345,8 @@ Item {
 
     TrayPanel {
         id: trayPanelComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxTray
+        barLayout: barLayout
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx
@@ -292,6 +358,8 @@ Item {
 
     BtMenu {
         id: btMenuComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxBt
+        barLayout: barLayout
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         blurRadius: settingsMenuComp.blurPx
@@ -304,6 +372,7 @@ Item {
 
     Workspaces {
         id: wsOverviewComp
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxWs
         screen: bar.screen
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
@@ -347,6 +416,8 @@ Item {
     Lock {
         id: lockComp
         store: notify
+        parallaxAllowed: visualRoot.parallaxOn && visualRoot.parallaxLock
+        barLayout: barLayout
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled
         colBg: logic.colBg
@@ -359,6 +430,7 @@ Item {
     SettingsMenu {
         id: settingsMenuComp
         updater: updaterComp
+        parallax: visualRoot
         barLayout: barLayout
         wallpaper: visualRoot.wallpaperPath
         onDoNotDisturbChanged: visualRoot.notify.doNotDisturb = doNotDisturb
@@ -408,6 +480,21 @@ Item {
             altTabComp.cycle(d)
         }
         function dnd(): void { settingsMenuComp.doNotDisturb = !settingsMenuComp.doNotDisturb }
+        function parallax(): void { visualRoot.parallaxOn = !visualRoot.parallaxOn }
+        function parallaxOn(): void { visualRoot.parallaxOn = true }
+        function parallaxOff(): void { visualRoot.parallaxOn = false }
+        function parallaxToggle(name: string): void { visualRoot.parallaxSet(name, !visualRoot.parallaxGet(name)) }
+        function parallaxMpris(): void { visualRoot.parallaxMpris = !visualRoot.parallaxMpris }
+        function parallaxLyrics(): void { visualRoot.parallaxLyrics = !visualRoot.parallaxLyrics }
+        function parallaxSettings(): void { visualRoot.parallaxSettings = !visualRoot.parallaxSettings }
+        function parallaxClip(): void { visualRoot.parallaxClip = !visualRoot.parallaxClip }
+        function parallaxTray(): void { visualRoot.parallaxTray = !visualRoot.parallaxTray }
+        function parallaxBt(): void { visualRoot.parallaxBt = !visualRoot.parallaxBt }
+        function parallaxLock(): void { visualRoot.parallaxLock = !visualRoot.parallaxLock }
+        function parallaxCalendar(): void { visualRoot.parallaxCalendar = !visualRoot.parallaxCalendar }
+        function parallaxSys(): void { visualRoot.parallaxSys = !visualRoot.parallaxSys }
+        function parallaxVolume(): void { visualRoot.parallaxVolume = !visualRoot.parallaxVolume }
+        function parallaxWs(): void { visualRoot.parallaxWs = !visualRoot.parallaxWs }
     }
 
     // управление обновлениями из терминала: quickshell ipc -p ~/.tech/shell call updater check|status|apply|autoOn|autoOff|autoToggle

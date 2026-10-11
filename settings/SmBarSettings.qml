@@ -13,7 +13,7 @@ Scope {
     property int openIdx: -1
     property bool revert: false
 
-    property real pushY: subOpen ? (subItems.length * 36 + 20) * 1.12 : 0
+    property real pushY: subOpen ? (subItems.length * (subItems.length > 7 ? 26 : 36) + 20) * 1.12 : 0
     Behavior on pushY { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
     Binding { target: root.menu.barLayout; property: "subPush"; value: root.pushY }
     readonly property bool subOpen: subOpenId !== ""
@@ -116,6 +116,15 @@ Scope {
         menu.barLayout.setPosition(order[(order.indexOf(menu.barLayout.position) + 1) % order.length])
     }
 
+    // пункт подменю карточки «Параллакс»: key - имя флага в Visual.qml (parallax<Key>)
+    function px(id, icon, ru, en, key) {
+        return {
+            id: id, icon: icon, label: menu.lang === "ru" ? ru : en,
+            get: () => menu.parallax ? menu.parallax.parallaxGet(key) : true,
+            set: v => { if (menu.parallax) menu.parallax.parallaxSet(key, v) }
+        }
+    }
+
     readonly property var barModel: [
         { id: "ws", svg: "workspaces", get: () => menu.showWorkspaces, set: v => menu.showWorkspaces = v },
 
@@ -162,9 +171,26 @@ Scope {
               { id: "blurlive", svg: "blur", label: menu.lang === "ru" ? "Живой блюр" : "Live blur",
                 get: () => menu.blurLive, set: v => menu.blurCtl.setBlurLive(v) },
               { id: "blurpreload", svg: "blur", label: menu.lang === "ru" ? "Предзагрузка воркспейсов" : "Preload workspaces",
-                get: () => menu.blurPreload, set: v => menu.blurCtl.setBlurPreload(v) },
-              { id: "cameffect", svg: "blur", label: menu.lang === "ru" ? "Эффект камеры" : "Camera effect",
-                get: () => menu.barLayout.camEffect, set: v => menu.barLayout.setCamEffect(v) }
+                get: () => menu.blurPreload, set: v => menu.blurCtl.setBlurPreload(v) }
+          ] },
+
+        { id: "parallax", icon: "\uf24d",
+          label: menu.lang === "ru" ? "Параллакс" : "Parallax",
+          get: () => menu.parallax ? menu.parallax.parallaxOn : true,
+          set: root.guard(v => { if (menu.parallax) menu.parallax.parallaxOn = v }),
+          bs: () => root,
+          sub: [
+              root.px("pxsettings", "\uf013", "Настройки", "Settings", "Settings"),
+              root.px("pxlock", "\uf023", "Экран блокировки", "Lock screen", "Lock"),
+              root.px("pxtray", "\uf2d2", "Трей", "Tray", "Tray"),
+              root.px("pxbt", "\uf294", "Bluetooth", "Bluetooth", "Bt"),
+              root.px("pxclip", "\uf0ea", "Буфер обмена", "Clipboard", "Clip"),
+              root.px("pxcalendar", "\uf073", "Календарь", "Calendar", "Calendar"),
+              root.px("pxsys", "\uf2db", "Система", "System monitor", "Sys"),
+              root.px("pxvolume", "\uf028", "Громкость", "Volume", "Volume"),
+              root.px("pxws", "\uf009", "Воркспейсы", "Workspaces", "Ws"),
+              root.px("pxmpris", "\uf001", "Плеер", "Player", "Mpris"),
+              root.px("pxlyrics", "\uf0c9", "Лирика", "Lyrics", "Lyrics")
           ] },
 
         { id: "dnd", svg: "dnd", get: () => menu.doNotDisturb, set: v => menu.doNotDisturb = v },

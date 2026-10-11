@@ -25,6 +25,21 @@ PanelWindow {
 
     property var anchorRect: ({ x: 0, y: 0, w: 0, h: 0, lo: 0, hi: 0 })
 
+    // эффект глубины: содержимое панели наклоняется и сдвигается за курсором (Visual.qml: parallaxAllowed).
+    // стекло панели не двигается: оно приросло к бару и обрезается по его краю, поэтому крутится только контент
+    property bool parallaxAllowed: true
+    property real camShiftX: 5
+    property real camShiftY: 4
+    property real camTilt: 3.0
+    readonly property real camTargetX: (parallaxAllowed && camHover.hovered && panel.width > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.x / panel.width)) * 2 - 1 : 0
+    readonly property real camTargetY: (parallaxAllowed && camHover.hovered && panel.height > 0)
+        ? Math.max(0, Math.min(1, camHover.point.position.y / panel.height)) * 2 - 1 : 0
+    property real camX: camTargetX
+    property real camY: camTargetY
+    Behavior on camX { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+    Behavior on camY { SmoothedAnimation { velocity: 2.2; maximumEasingTime: 300 } }
+
     readonly property string fontFamily: "JetBrainsMono Nerd Font, Monospace"
 
     readonly property var sink: Pipewire.defaultAudioSink
@@ -61,6 +76,13 @@ PanelWindow {
         return String.fromCodePoint(cp)
     }
 
+    // сколько волн рисовать у динамика (SlashIcon.waves), без учёта mute: mute рисуется перечёркиванием.
+    // Когда число волн падает, лишняя стирается сверху вниз
+    function volWaves(audio) {
+        if (!audio || audio.volume <= 0.001) return 0
+        return audio.volume < 0.34 ? 1 : 2
+    }
+
     function volIcon(audio) {
         if (!audio || audio.muted || audio.volume <= 0) return "volumeMute"
         if (audio.volume < 0.34) return "volumeLow"
@@ -90,8 +112,13 @@ PanelWindow {
     readonly property bool horiz: side === "top" || side === "bottom"
     readonly property real pad: 14
     readonly property real cr: 6
-    readonly property real pw: horiz ? Math.max(300, anchorRect.w) : 300
-    readonly property real ph: body.implicitHeight + pad * 2
+    readonly property real edge: 16
+    readonly property real pw: Math.min(horiz ? Math.max(300, anchorRect.w) : 300, width - 16)
+    // на боковом баре высота считается по длине блока, как ширина на нижнем (но не меньше содержимого)
+    readonly property real ph: Math.min(horiz ? body.implicitHeight + pad * 2 : Math.max(body.implicitHeight + pad * 2, anchorRect.h), height - 16)
+    // отступ от края экрана: 16, а если панель на всю длину бара - 8, чтобы совпасть с его краями
+    readonly property real edgeX: pw >= width - 16.5 ? 8 : edge
+    readonly property real edgeY: ph >= height - 16.5 ? 8 : edge
 
     function clamp(v, lo, hi) {
         return Math.max(lo, Math.min(v, hi))
@@ -103,11 +130,11 @@ PanelWindow {
 
     readonly property real px: side === "left" ? anchorRect.x + anchorRect.w + gapNow
         : side === "right" ? anchorRect.x - pw - gapNow
-        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, 8, width - 8 - pw)
+        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, edgeX, width - edgeX - pw)
 
     readonly property real py: side === "bottom" ? anchorRect.y - ph - gapNow
         : side === "top" ? anchorRect.y + anchorRect.h + gapNow
-        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, 8, height - 8 - ph)
+        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, edgeY, height - edgeY - ph)
 
     function sq(v) {
         return fused && v >= anchorRect.lo - 0.5 && v <= anchorRect.hi + 0.5
@@ -245,10 +272,14 @@ PanelWindow {
 
                 color: vp.colGlass
 
+                Behavior on color { ColorAnimation { duration: 400 } }
+
                 topLeftRadius: ((vp.side === "top" && vp.sq(vp.px)) || (vp.side === "left" && vp.sq(vp.py))) ? 0 : vp.cr
                 topRightRadius: ((vp.side === "top" && vp.sq(vp.px + vp.pw)) || (vp.side === "right" && vp.sq(vp.py))) ? 0 : vp.cr
                 bottomLeftRadius: ((vp.side === "bottom" && vp.sq(vp.px)) || (vp.side === "left" && vp.sq(vp.py + vp.ph))) ? 0 : vp.cr
                 bottomRightRadius: ((vp.side === "bottom" && vp.sq(vp.px + vp.pw)) || (vp.side === "right" && vp.sq(vp.py + vp.ph))) ? 0 : vp.cr
+
+                HoverHandler { id: camHover }
 
                 MouseArea {
                     anchors.fill: parent
@@ -261,39 +292,25 @@ PanelWindow {
                 }
                 Column {
                     id: body
+                    transform: [
+                        Translate { x: -vp.camX * vp.camShiftX; y: -vp.camY * vp.camShiftY },
+                        Rotation {
+                            origin.x: body.width / 2
+                            origin.y: body.height / 2
+                            axis { x: 0; y: 1; z: 0 }
+                            angle: vp.camX * vp.camTilt
+                        },
+                        Rotation {
+                            origin.x: body.width / 2
+                            origin.y: body.height / 2
+                            axis { x: 1; y: 0; z: 0 }
+                            angle: -vp.camY * vp.camTilt
+                        }
+                    ]
                     x: vp.pad
                     y: vp.pad
                     width: parent.width - vp.pad * 2
                     spacing: 12
-
-                    Row {
-                        spacing: 10
-                        height: 28
-
-                        Rectangle {
-                            width: 28
-                            height: 28
-                            radius: vp.cr
-                            color: vp.colSecondary
-
-                            Icon {
-                                anchors.centerIn: parent
-                                name: vp.volIcon(vp.sinkAudio)
-                                size: 15
-                                color: vp.colAccent
-                                dim: 1.3
-                            }
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: tr("vol.title")
-                            color: vp.colText
-                            font.bold: true
-                            font.pixelSize: 15
-                            font.family: vp.fontFamily
-                        }
-                    }
 
                     Column {
                         width: parent.width
@@ -313,7 +330,9 @@ PanelWindow {
                         VolRow {
                             width: parent.width
                             audio: vp.sinkAudio
-                            icon: vp.volIcon(vp.sinkAudio)
+                            iconKind: "speaker"
+                            iconWaves: vp.volWaves(vp.sinkAudio)
+                            slashed: !vp.sinkAudio || vp.sinkAudio.muted || vp.sinkAudio.volume <= 0
                             fillColor: vp.colAccent
                             textColor: vp.colText
                             trackColor: Qt.alpha(vp.colText, 0.14)
@@ -340,7 +359,8 @@ PanelWindow {
                         VolRow {
                             width: parent.width
                             audio: vp.sourceAudio
-                            icon: vp.sourceAudio && !vp.sourceAudio.muted ? "mic" : "micOff"
+                            iconKind: "mic"
+                            slashed: !vp.sourceAudio || vp.sourceAudio.muted
                             fillColor: vp.colAccent
                             textColor: vp.colText
                             trackColor: Qt.alpha(vp.colText, 0.14)
@@ -395,6 +415,8 @@ PanelWindow {
                                         radius: 2
                                         anchors.verticalCenter: parent.verticalCenter
                                         color: devRow.current ? vp.colAccent : Qt.alpha(vp.colText, 0.3)
+
+                                        Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
                                     }
 
                                     Text {
@@ -402,6 +424,7 @@ PanelWindow {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: vp.nodeName(devRow.modelData)
                                         color: devRow.current ? vp.colAccent : vp.colText
+                                        Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
                                         font.pixelSize: 11
                                         font.bold: devRow.current
                                         font.family: vp.fontFamily
@@ -429,7 +452,9 @@ PanelWindow {
         id: row
 
         property var audio: null
-        property string icon: ""
+        property string iconKind: "speaker" // что рисует SlashIcon: "mic" | "speaker"
+        property int iconWaves: 99          // у динамика: сколько волн видно
+        property bool slashed: false         // перечёркнуто (звук выключен / микрофон выключен)
         property color fillColor
         property color textColor
         property color trackColor
@@ -453,12 +478,18 @@ PanelWindow {
 
             Behavior on color { ColorAnimation { duration: 150 } }
 
-            Icon {
+            readonly property color glyphColor: row.muted ? Qt.alpha(row.textColor, 0.55) : row.fillColor
+
+            // иконка кодом: черта растёт по диагонали при выключении и стирается сверху вниз при включении
+            SlashIcon {
                 anchors.centerIn: parent
-                name: row.icon
-                size: 15
-                color: row.muted ? Qt.alpha(row.textColor, 0.55) : row.fillColor
-                dim: row.muted ? 1.0 : 1.3
+                kind: row.iconKind
+                waves: row.iconWaves
+                size: 16
+                slashed: row.slashed
+                color: muteBtn.glyphColor
+
+                Behavior on color { ColorAnimation { duration: 300 } }
             }
 
             MouseArea {
@@ -470,63 +501,24 @@ PanelWindow {
             }
         }
 
-        Item {
+        // толстая полоска с водой (common/FatSlider.qml): без кругляшка, проценты по центру
+        FatSlider {
             id: slider
             anchors.left: muteBtn.right
             anchors.leftMargin: 10
-            anchors.right: pct.left
-            anchors.rightMargin: 10
+            anchors.right: parent.right
             height: parent.height
 
-
-            Rectangle {
-                id: track
-                width: parent.width
-                height: 8
-                radius: 4
-                anchors.verticalCenter: parent.verticalCenter
-                color: row.trackColor
-
-                Rectangle {
-                    width: Math.max(0, Math.min(1, row.value)) * parent.width
-                    height: parent.height
-                    radius: 4
-                    color: row.fillColor
-                    opacity: row.muted ? 0.35 : 1.0
-
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                }
-            }
-
-            Rectangle {
-                width: 14
-                height: 14
-                radius: 7
-                anchors.verticalCenter: parent.verticalCenter
-                x: Math.max(0, Math.min(1, row.value)) * (parent.width - width)
-                color: row.muted ? Qt.alpha(row.textColor, 0.55) : row.fillColor
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                function apply(mx) {
-                    row.setVolume(Math.max(0, Math.min(1, (mx - 7) / (width - 14))))
-                }
-                onPressed: (m) => apply(m.x)
-                onPositionChanged: (m) => { if (pressed) apply(m.x) }
-            }
-        }
-        Text {
-            id: pct
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            width: 38
-            horizontalAlignment: Text.AlignRight
-            text: Math.round(row.value * 100) + "%"
-            color: row.muted ? Qt.alpha(row.textColor, 0.55) : row.textColor
-            font.pixelSize: 11
-            font.bold: true
-            font.family: row.fontFamily
+            value: row.value
+            dimmed: row.muted
+            usable: row.audio !== null
+            colAccent: row.fillColor
+            colText: row.textColor
+            colBg: vp.colBg
+            fontFamily: row.fontFamily
+            radius: 6
+            onMoved: (v) => row.setVolume(v)
+            onWheeled: (dir) => row.setVolume(row.value + dir * 0.05)
         }
     }
 }

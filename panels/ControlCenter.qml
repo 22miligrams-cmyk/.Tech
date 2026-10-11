@@ -18,6 +18,8 @@
 // Интерфейс для Visual.qml такой же, как у других панелей: visible, isClosing, toggleMenu().
 
 import QtQuick
+import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -65,16 +67,20 @@ PanelWindow {
     readonly property real gap: 8
     readonly property real pw: 340
     // панель на всю высоту: от края экрана до бара (или с другой стороны, если бар сверху)
-    readonly property real availTop: (hasAnchor && side === "top") ? anchorRect.y + anchorRect.h + gap : gap
-    readonly property real availBottom: (hasAnchor && side === "bottom") ? anchorRect.y - gap : height - gap
+    readonly property real availTop: (hasAnchor && !lateral && side === "top") ? anchorRect.y + anchorRect.h + gap : gap
+    readonly property real availBottom: (hasAnchor && !lateral && side === "bottom") ? anchorRect.y - gap : height - gap
     readonly property real ph: Math.max(300, availBottom - availTop)
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(v, hi)) }
 
     readonly property bool hasAnchor: anchorRect.w > 0 && anchorRect.h > 0
 
-    // по горизонтали всегда у правого края; если бар справа - встаём вплотную к нему
-    readonly property real px: (side === "right" && hasAnchor) ? anchorRect.x - pw - gap : width - pw - gap
+    // бар сбоку (слева/справа): ведём себя так, будто бар сверху - панель в правом верхнем углу,
+    // без привязки к боковому бару (его anchorRect для нас не используется)
+    readonly property bool lateral: side === "left" || side === "right"
+
+    // по горизонтали всегда у правого края экрана
+    readonly property real px: width - pw - gap
 
     readonly property real py: availTop
 
@@ -312,34 +318,6 @@ PanelWindow {
     //  Inline-компоненты (тот же приём, что и в Lock.qml: удержание + вода)
     // =====================================================================
 
-    // вода удержания: тот же шейдер WaterFill.frag.qsb, что и в Lock.qml (лежит рядом, в этой же папке)
-    component HoldWater: ShaderEffect {
-        id: hw
-        property real level: 0               // 0..1
-        property bool active: false          // идёт удержание: поверхность плещется
-        property color fillColor: "#a3cef1"
-        property real cornerRadius: 6
-
-        anchors.fill: parent
-        visible: level > 0.002
-        fragmentShader: Qt.resolvedUrl("WaterFill.frag.qsb")
-
-        property size tileSize: Qt.size(width, height)
-        property real time: 0
-        property real slosh: active ? 0.25 : 0
-        property real radiusPx: cornerRadius
-        property real fillAlpha: 0.9
-        Behavior on slosh { NumberAnimation { duration: 300 } }
-
-        NumberAnimation on time {
-            from: 0
-            to: 6.283185307
-            duration: 8000
-            loops: Animation.Infinite
-            running: hw.visible
-        }
-    }
-
     // управление удержанием: press() наливает с постоянной скоростью от текущего уровня,
     // release() быстро сливает, дошло до верха - fired() и всё сбрасывается
     component HoldCtl: Item {
@@ -381,6 +359,46 @@ PanelWindow {
         }
     }
 
+    // содержимое плитки (svg-иконка / иконка кодом / глиф-текст) одним куском: в HoldTile рисуется дважды,
+    // обычным цветом и тёмным, а вода решает, где виден какой
+    component TileGlyph: Item {
+        id: tg
+        property string iconName: ""
+        property string slashKind: ""
+        property bool slashed: false
+        property string glyph: ""
+        property real iconSize: 16
+        property color color: "white"
+
+        anchors.fill: parent
+
+        Icon {
+            anchors.centerIn: parent
+            visible: tg.slashKind === "" && tg.iconName !== ""
+            name: tg.iconName
+            size: tg.iconSize
+            color: tg.color
+        }
+
+        SlashIcon {
+            anchors.centerIn: parent
+            visible: tg.slashKind !== ""
+            kind: tg.slashKind
+            slashed: tg.slashed
+            size: tg.iconSize
+            color: tg.color
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: tg.iconName === "" && tg.slashKind === ""
+            text: tg.glyph
+            color: tg.color
+            font.pixelSize: tg.iconSize
+            font.family: cc.fontFamily
+        }
+    }
+
     // готовая плитка-кнопка на удержание: прямоугольник + глиф + наполнение водой + MouseArea.
     // Заменяет CcIconTile там, где раньше было подтверждение вторым кликом (armedAct/confirmRun).
     // active/usable добавлены для переключателей (Wi-Fi, Bluetooth, DND, микрофон):
@@ -392,6 +410,8 @@ PanelWindow {
         property bool usable: true
         property string glyph: ""
         property string iconName: ""         // имя svg из icons/ (если задано - рисуем его вместо глифа)
+        property string slashKind: ""        // "mic" | "bell" | "bluetooth": иконка рисуется кодом (SlashIcon) с анимацией перечёркивания, iconName игнорируется
+        property bool slashed: false         // перечёркнута ли иконка (только если задан slashKind)
         property real iconSize: 16
         property color fillColor: cc.colAccent
         signal fired()
@@ -408,30 +428,65 @@ PanelWindow {
             onFired: { if (tile.usable) tile.fired() }
         }
 
-        HoldWater {
+        readonly property bool holdOn: hold.hold > 0.002
+        readonly property color glyphColor: tile.active ? cc.colAccent : cc.colText
+
+        WaterEffect {
+            id: water
+            anchors.fill: parent
             level: hold.hold
             active: hold.holding
             fillColor: tile.fillColor
             cornerRadius: tile.radius
         }
 
-        Icon {
-            anchors.centerIn: parent
-            visible: tile.iconName !== ""
-            name: tile.iconName
-            size: tile.iconSize
-            color: hold.hold > 0.5 ? cc.colBg : (tile.active ? cc.colAccent : cc.colText)
+        // обычная иконка: без воды рисуется как есть; во время удержания идёт в слой и показывается
+        // только там, где воды ещё нет (маска наоборот)
+        TileGlyph {
+            id: glyphNormal
+            iconName: tile.iconName
+            slashKind: tile.slashKind
+            slashed: tile.slashed
+            glyph: tile.glyph
+            iconSize: tile.iconSize
+            color: tile.glyphColor
             Behavior on color { ColorAnimation { duration: 200 } }
+            visible: !tile.holdOn
+            layer.enabled: tile.holdOn
+            layer.smooth: true
+            layer.textureSize: Qt.size(width * 2, height * 2)
         }
 
-        Text {
-            anchors.centerIn: parent
-            visible: tile.iconName === ""
-            text: tile.glyph
-            color: hold.hold > 0.5 ? cc.colBg : (tile.active ? cc.colAccent : cc.colText)
-            font.pixelSize: tile.iconSize
-            font.family: cc.fontFamily
-            Behavior on color { ColorAnimation { duration: 200 } }
+        // тёмная копия: видна только там, где её касается вода
+        TileGlyph {
+            id: glyphDark
+            iconName: tile.iconName
+            slashKind: tile.slashKind
+            slashed: tile.slashed
+            glyph: tile.glyph
+            iconSize: tile.iconSize
+            color: cc.colBg
+            visible: false
+            layer.enabled: tile.holdOn
+            layer.smooth: true
+            layer.textureSize: Qt.size(width * 2, height * 2)
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            visible: tile.holdOn
+            source: glyphNormal
+            maskEnabled: true
+            maskSource: water
+            maskInverted: true
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            visible: tile.holdOn
+            source: glyphDark
+            maskEnabled: true
+            maskSource: water
         }
 
         MouseArea {
@@ -487,7 +542,7 @@ PanelWindow {
             id: holder
             x: cc.px
             y: cc.py
-            width: (cc.side === "right" && cc.hasAnchor) ? cc.pw : cc.width - cc.px
+            width: cc.width - cc.px
             height: cc.ph
             clip: true
 
@@ -512,8 +567,6 @@ PanelWindow {
                 opacity: Math.min(1, cc.p * 1.6)
                 radius: cc.cr
                 color: cc.colGlass
-                border.width: 1
-                border.color: Qt.alpha(cc.colText, 0.12)
 
                 // клики по панели не долетают до фона и не закрывают её
                 MouseArea {
@@ -600,14 +653,19 @@ PanelWindow {
                             width: parent.width
                             spacing: 10
 
-                    CcSlider {
+                    FatSlider {
                         width: parent.width
-                        glyph: cc.sink && (cc.sink.muted || cc.sink.volume <= 0) ? "\uf026" : "\uf028"
+                        iconKind: "speaker"
+                        // число волн по уровню; когда оно падает, лишняя стирается сверху вниз
+                        iconWaves: !cc.sink || cc.sink.volume <= 0.001 ? 0 : (cc.sink.volume < 0.34 ? 1 : 2)
+                        iconSlashed: !cc.sink || cc.sink.muted || cc.sink.volume <= 0
                         value: cc.sink ? cc.sink.volume : 0
                         dimmed: cc.sink ? cc.sink.muted : false
                         usable: cc.sink !== null
                         colAccent: cc.colAccent
                         colText: cc.colText
+                        colBg: cc.colBg
+                        fontFamily: cc.fontFamily
                         radius: cc.cr
                         onMoved: (v) => {
                             if (!cc.sink) return
@@ -617,14 +675,16 @@ PanelWindow {
                         onGlyphClicked: { if (cc.sink) cc.sink.muted = !cc.sink.muted }
                     }
 
-                    CcSlider {
+                    FatSlider {
                         width: parent.width
                         visible: cc.brightAvail
-                        height: visible ? 22 : 0
+                        height: visible ? 32 : 0
                         glyph: "\uf185"
                         value: cc.bright
                         colAccent: cc.colAccent
                         colText: cc.colText
+                        colBg: cc.colBg
+                        fontFamily: cc.fontFamily
                         radius: cc.cr
                         onMoved: (v) => cc.setBright(v)
                     }
@@ -667,7 +727,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                iconName: "bluetooth"
+                                slashKind: "bluetooth"
+                                slashed: !cc.btOn
                                 iconSize: 24
                                 active: cc.btOn
                                 usable: cc.btAdapter !== null
@@ -681,7 +742,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                iconName: cc.dndOn ? "notificationsOff" : "notifications"
+                                slashKind: "bell"
+                                slashed: cc.dndOn
                                 iconSize: 24
                                 active: cc.dndOn
                                 fillColor: cc.colAccent
@@ -695,7 +757,8 @@ PanelWindow {
 
                             HoldTile {
                                 anchors.fill: parent
-                                iconName: cc.micMuted ? "micOff" : "mic"
+                                slashKind: "mic"
+                                slashed: cc.micMuted
                                 iconSize: 24
                                 active: cc.micAudio !== null && !cc.micMuted
                                 usable: cc.micAudio !== null
@@ -728,14 +791,39 @@ PanelWindow {
                         width: parent.width
                         height: 26
 
-                        Text {
+                        Row {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: cc.t("cc.notifs", "Уведомления") + (notifArea.count > 0 ? "  " + notifArea.count : "")
-                            color: Qt.alpha(cc.colText, 0.7)
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: cc.fontFamily
+                            spacing: 8
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: cc.t("cc.notifs", "Уведомления")
+                                color: Qt.alpha(cc.colText, 0.7)
+                                font.pixelSize: 11
+                                font.bold: true
+                                font.family: cc.fontFamily
+                            }
+
+                            // счётчик - маленькая таблетка с акцентом
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: notifArea.count > 0
+                                width: Math.max(height, nCount.implicitWidth + 10)
+                                height: 16
+                                radius: cc.cr
+                                color: Qt.alpha(cc.colAccent, 0.18)
+
+                                Text {
+                                    id: nCount
+                                    anchors.centerIn: parent
+                                    text: notifArea.count
+                                    color: cc.colAccent
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    font.family: cc.fontFamily
+                                }
+                            }
                         }
 
                         Rectangle {
@@ -795,21 +883,29 @@ PanelWindow {
                     // заглушка, когда пусто
                     Column {
                         anchors.centerIn: parent
-                        spacing: 8
+                        spacing: 12
                         visible: notifArea.count === 0
-                        opacity: 0.5
 
-                        Icon {
+                        Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            name: "notificationsOff"
-                            color: cc.colAccent
-                            size: 24
+                            width: 56
+                            height: 56
+                            radius: cc.cr
+                            color: Qt.alpha(cc.colAccent, 0.10)
+
+                            SlashIcon {
+                                anchors.centerIn: parent
+                                kind: "bell"
+                                slashed: true
+                                size: 26
+                                color: Qt.alpha(cc.colAccent, 0.8)
+                            }
                         }
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: cc.t("notif.empty", "Нет уведомлений")
-                            color: cc.colText
+                            color: Qt.alpha(cc.colText, 0.5)
                             font.pixelSize: 11
                             font.family: cc.fontFamily
                         }
@@ -835,6 +931,12 @@ PanelWindow {
                         displaced: Transition {
                             NumberAnimation { property: "y"; duration: 200; easing.type: Easing.OutCubic }
                         }
+                        add: Transition {
+                            ParallelAnimation {
+                                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200 }
+                                NumberAnimation { property: "scale"; from: 0.94; to: 1; duration: 220; easing.type: Easing.OutCubic }
+                            }
+                        }
 
                         delegate: Rectangle {
                             id: card
@@ -849,8 +951,11 @@ PanelWindow {
                             height: cardCol.implicitHeight + 20
                             radius: cc.cr
                             color: Qt.alpha(cc.colText, cardMa.containsMouse ? 0.15 : 0.09)
+                            border.width: 1
+                            border.color: Qt.alpha(cc.colText, cardMa.containsMouse ? 0.14 : 0.06)
 
                             Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
 
                             // клик по карточке = прочитано; объявлен первым, крестик выше него
                             MouseArea {
@@ -861,28 +966,51 @@ PanelWindow {
                                 onClicked: { if (cc.store) cc.store.removeHistory(card.uid) }
                             }
 
+                            // на ховере вместо времени проступает крестик: подсказка, что клик закрывает карточку
+                            Icon {
+                                x: parent.width - width - 10
+                                y: 10 + 9 - height / 2
+                                name: "close"
+                                size: 10
+                                color: cc.colText
+                                opacity: cardMa.containsMouse ? 0.7 : 0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                            }
+
                             Column {
                                 id: cardCol
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: parent.top
                                 anchors.margins: 10
-                                spacing: 3
+                                spacing: 4
 
                                 Row {
                                     width: parent.width
+                                    height: 18
                                     spacing: 6
 
+                                    // плитка с первой буквой приложения
                                     Rectangle {
-                                        width: 6
-                                        height: 6
-                                        radius: 2
+                                        width: 18
+                                        height: 18
+                                        radius: cc.cr
                                         anchors.verticalCenter: parent.verticalCenter
-                                        color: cc.colAccent
+                                        color: Qt.alpha(cc.colAccent, 0.18)
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: card.appName !== "" ? card.appName.charAt(0).toUpperCase() : "•"
+                                            color: cc.colAccent
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            font.family: cc.fontFamily
+                                        }
                                     }
 
                                     Text {
-                                        width: parent.width - 6 - 6 - timeLbl.implicitWidth - 6 - 6
+                                        width: parent.width - 18 - 6 - timeLbl.implicitWidth - 6
+                                        anchors.verticalCenter: parent.verticalCenter
                                         text: card.appName
                                         color: cc.colAccent
                                         font.pixelSize: 10
@@ -893,10 +1021,13 @@ PanelWindow {
 
                                     Text {
                                         id: timeLbl
+                                        anchors.verticalCenter: parent.verticalCenter
                                         text: card.timeText
                                         color: Qt.alpha(cc.colText, 0.5)
                                         font.pixelSize: 9
                                         font.family: cc.fontFamily
+                                        opacity: cardMa.containsMouse ? 0 : 1
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
                                     }
                                 }
 

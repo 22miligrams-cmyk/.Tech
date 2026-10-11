@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import "../bar"
@@ -48,10 +49,32 @@ PanelWindow {
     readonly property bool horiz: side === "top" || side === "bottom"
     readonly property real pad: 14
     readonly property real cr: 6
-    readonly property real pw: horiz ? Math.max(380, anchorRect.w) : 360
-    readonly property real ph: 430
+    readonly property real edge: 16
+    readonly property real pw: Math.min(horiz ? Math.max(380, anchorRect.w) : 360, width - 16)
+    // на боковом баре высота считается по длине блока, как ширина на нижнем (но не меньше содержимого)
+    readonly property real ph: Math.min(horiz ? 430 : Math.max(430, anchorRect.h), height - 16)
+    // отступ от края экрана: 16, а если панель на всю длину бара - 8, чтобы совпасть с его краями
+    readonly property real edgeX: pw >= width - 16.5 ? 8 : edge
+    readonly property real edgeY: ph >= height - 16.5 ? 8 : edge
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(v, hi)) }
+
+    // ── параллакс (общий выключатель приходит из Visual.qml) ──
+    // слой с размытой обложкой за текстом следует за курсором по всему экрану, сам текст не двигается
+    property bool parallax: true
+    readonly property real parallaxRange: 450
+    readonly property string artUrl: lyr && lyr.player && lyr.player.trackArtUrl ? lyr.player.trackArtUrl : ""
+    readonly property real lookTX: parallax && hov.hovered
+        ? clamp((hov.point.position.x - (px + pw / 2)) / parallaxRange, -1, 1) : 0
+    readonly property real lookTY: parallax && hov.hovered
+        ? clamp((hov.point.position.y - (py + ph / 2)) / parallaxRange, -1, 1) : 0
+    // общий сдвиг текста лирики (целые пиксели, чтобы не мылилось; одно значение на все строки)
+    readonly property int textDX: Math.round(-lookX * 14)
+    readonly property int textDY: Math.round(-lookY * 9)
+    property real lookX: lookTX
+    property real lookY: lookTY
+    Behavior on lookX { SpringAnimation { spring: 2.6; damping: 0.32; epsilon: 0.002 } }
+    Behavior on lookY { SpringAnimation { spring: 2.6; damping: 0.32; epsilon: 0.002 } }
     // караоке (полный экран)
     // настройки лежат тут, поэтому запоминаются между открытиями (пока шелл жив)
     QtObject {
@@ -62,6 +85,7 @@ PanelWindow {
         property bool viz: true
         property bool wordHL: true
         property bool sideOpen: true
+        property bool parallax: true
     }
 
     LazyLoader {
@@ -72,6 +96,7 @@ PanelWindow {
             screen: vp.screen
             lyr: vp.lyr
             cfg: kcfg
+            parallax: vp.parallax
             colBg: vp.colBg
             colAccent: vp.colAccent
             colText: vp.colText
@@ -99,11 +124,11 @@ PanelWindow {
 
     readonly property real px: side === "left" ? anchorRect.x + anchorRect.w + gapNow
         : side === "right" ? anchorRect.x - pw - gapNow
-        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, 8, width - 8 - pw)
+        : clamp(anchorRect.x + anchorRect.w / 2 - pw / 2, edgeX, width - edgeX - pw)
 
     readonly property real py: side === "bottom" ? anchorRect.y - ph - gapNow
         : side === "top" ? anchorRect.y + anchorRect.h + gapNow
-        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, 8, height - 8 - ph)
+        : clamp(anchorRect.y + anchorRect.h / 2 - ph / 2, edgeY, height - edgeY - ph)
 
     function sq(v) {
         if (!fused) return false
@@ -208,6 +233,9 @@ PanelWindow {
         anchors.fill: parent
         focus: true
 
+        // курсор для параллакса по всему экрану (пассивный — клики не трогает)
+        HoverHandler { id: hov }
+
         Keys.onEscapePressed: vp.manual ? vp.closeManual() : vp.toggleMenu()
 
         MouseArea {
@@ -280,6 +308,36 @@ PanelWindow {
                     anchors.fill: parent
                     onClicked: (mouse) => mouse.accepted = true
                 }
+                // дальний слой: размытая обложка, смещается по курсору
+                Item {
+                    anchors.fill: parent
+                    clip: true
+                    opacity: bgArt.status === Image.Ready ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                    Image {
+                        id: bgArt
+                        width: parent.width + 60
+                        height: parent.height + 60
+                        x: -30 + vp.lookX * 16
+                        y: -30 + vp.lookY * 16
+                        source: vp.artUrl
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        sourceSize.width: 128
+                        sourceSize.height: 128
+                        opacity: 0.26
+                        layer.enabled: true
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blur: 1.0
+                            blurMax: 48
+                            saturation: 0.25
+                        }
+                    }
+                }
+
                 Item {
                     id: content
                     anchors.fill: parent
@@ -565,7 +623,11 @@ PanelWindow {
                                 // --- волна: строка стартует со старого места (shiftD) и едет на своё, чем дальше от текущей — тем позже ---
                                 property real shiftD: 0
                                 property int shiftDelay: 0
-                                transform: Translate { id: tr }
+                                // первый Translate — волна при смене строки, второй — параллакс (одинаковый у всех строк)
+                                transform: [
+                                    Translate { id: tr },
+                                    Translate { x: vp.textDX; y: vp.textDY }
+                                ]
 
                                 SequentialAnimation {
                                     id: waveAnim

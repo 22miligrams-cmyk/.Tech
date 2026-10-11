@@ -54,8 +54,14 @@ Scope {
     // Считается ниже, на Canvas 1x1 - пока не посчитан, используем акцент, чтобы не мелькало серым.
     property color wallColor: colAccent
 
-    // эффект камеры (как в SettingsMenu): карточка входа слегка едет и наклоняется за мышкой
-    property bool camEffect: true
+    // эффект камеры (как в SettingsMenu): карточка входа слегка едет и наклоняется за мышкой.
+    // Тумблер общий с настройками ("Эффект камеры" в SmBarSettings): если barLayout передан
+    // снаружи (Lock { barLayout: visualRoot.barLayout }), берём состояние оттуда, иначе
+    // остаёмся на true, чтобы ничего не сломалось, если barLayout ещё не прокинут.
+    property var barLayout: null
+    // разрешает эффект камеры именно этой панели (Visual.qml: общий параллакс && свой пункт карточки «Параллакс»)
+    property bool parallaxAllowed: true
+    readonly property bool camEffect: parallaxAllowed
     property real camStrength: 1.0
     property real camMoveX: 50
     property real camMoveY: 28
@@ -568,7 +574,7 @@ Scope {
 
         anchors.fill: parent
         visible: level > 0.002
-        fragmentShader: Qt.resolvedUrl("WaterFill.frag.qsb")
+        fragmentShader: Qt.resolvedUrl("../assets/WaterFill.frag.qsb")
 
         property size tileSize: Qt.size(width, height)
         property real time: 0
@@ -892,7 +898,7 @@ Scope {
         ShaderEffect {
             id: sh
             anchors.fill: parent
-            fragmentShader: Qt.resolvedUrl("WaveMask.frag.qsb")
+            fragmentShader: Qt.resolvedUrl("../assets/WaveMask.frag.qsb")
             onStatusChanged: {
                 if (status === ShaderEffect.Error)
                     console.warn("Lock: WaveMask.frag.qsb не загрузился (" + fragmentShader + "), волна будет прямой:\n" + log)
@@ -962,12 +968,12 @@ Scope {
         }
         onRevealedChanged: { if (revealed) water.splash(0.7) }
 
-        // вода: шейдер WaterFill.frag (собери: qsb --qt6 -o WaterFill.frag.qsb WaterFill.frag)
+        // вода: шейдер assets/WaterFill.frag (собери в ../assets: qsb --qt6 -o WaterFill.frag.qsb WaterFill.frag)
         ShaderEffect {
             id: water
             anchors.fill: parent
             visible: level > 0.002
-            fragmentShader: Qt.resolvedUrl("WaterFill.frag.qsb")
+            fragmentShader: Qt.resolvedUrl("../assets/WaterFill.frag.qsb")
             onStatusChanged: {
                 if (status === ShaderEffect.Error)
                     console.warn("Lock: WaterFill.frag.qsb не загрузился (" + fragmentShader + "), заливка будет плоской:\n" + log)

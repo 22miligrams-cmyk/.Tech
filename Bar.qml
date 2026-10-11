@@ -55,6 +55,11 @@ PanelWindow {
 
     readonly property real edgeShift: island ? 0 : 4
 
+    // толщина полосы поперёк бара и высота блоков в ней.
+    // На боковом баре чуть больше: так в плашку влезает текст стопкой (иконка сверху, значение снизу)
+    readonly property real thick: vertical ? 40 : 36
+    readonly property real cellH: vertical ? 34 : 30
+
     readonly property string wallpaperPath: backdrop.wallpaperPath
     function redetectBackdrop() { backdrop.redetect() }
 
@@ -137,8 +142,8 @@ PanelWindow {
         }
 
         const solidNow = barLayout.solidBar
-        const ly = solidNow ? ld.y - (36 - ld.height) / 2 : ld.y
-        const lh = solidNow ? 36 : ld.height
+        const ly = solidNow ? ld.y - (bar.thick - ld.height) / 2 : ld.y
+        const lh = solidNow ? bar.thick : ld.height
         const r = slideWrapper.toWindow(gx, ly, gw, lh)
 
         const horiz = !bar.vertical
@@ -212,15 +217,15 @@ PanelWindow {
 
     readonly property real barLen: screen ? (vertical ? screen.height : screen.width) - 2 * sideGap : 0
 
-    implicitWidth: bar.vertical ? 50 : Math.max(0, barLen)
-    implicitHeight: bar.vertical ? Math.max(0, barLen) : 50
+    implicitWidth: bar.vertical ? bar.thick + 14 : Math.max(0, barLen)
+    implicitHeight: bar.vertical ? Math.max(0, barLen) : bar.thick + 14
 
     onAppliedChanged: slideWrapper.settle()
     color: "transparent"
 
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "bar"
-    WlrLayershell.exclusiveZone: barLayout.autoHide ? 0 : 36 + bar.edgeGap
+    WlrLayershell.exclusiveZone: barLayout.autoHide ? 0 : bar.thick + bar.edgeGap
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
     mask: Region {
@@ -233,16 +238,16 @@ PanelWindow {
         clip: true
 
         readonly property real stripX: !bar.vertical ? 0
-            : (bar.applied === "left" ? bar.edgeGap - slideWrapper.slide : width - bar.edgeGap - 36 + slideWrapper.slide)
+            : (bar.applied === "left" ? bar.edgeGap - slideWrapper.slide : width - bar.edgeGap - bar.thick + slideWrapper.slide)
         readonly property real stripY: bar.vertical ? 0
-            : (bar.applied === "top" ? bar.edgeGap - slideWrapper.slide : height - bar.edgeGap - 36 + slideWrapper.slide)
+            : (bar.applied === "top" ? bar.edgeGap - slideWrapper.slide : height - bar.edgeGap - bar.thick + slideWrapper.slide)
 
         readonly property bool autoHide: barLayout.autoHide
 
         property bool anyRevealed: false
 
         readonly property real peek: 6
-        readonly property real hitThick: autoHide ? (anyRevealed ? 36 + bar.edgeGap : peek) : 36
+        readonly property real hitThick: autoHide ? (anyRevealed ? bar.thick + bar.edgeGap : peek) : bar.thick
 
         Item {
             id: hitBox
@@ -406,15 +411,15 @@ PanelWindow {
                 if (!bar.vertical) {
                     return {
                         x: Math.round(x + lx * f),
-                        y: Math.round(y + 18 + (ly - 18) * f),
+                        y: Math.round(y + bar.thick / 2 + (ly - bar.thick / 2) * f),
                         w: Math.round(lw * f),
                         h: Math.round(lh * f)
                     }
                 }
                 const cx = x + width / 2
-                const cy = y + 18
+                const cy = y + bar.thick / 2
                 const dx = lx - width / 2
-                const dy = ly - 18
+                const dy = ly - bar.thick / 2
                 return {
                     x: Math.round(cx - (dy + lh) * f),
                     y: Math.round(cy + dx * f),
@@ -426,12 +431,12 @@ PanelWindow {
             function toWindowSmooth(lx, ly, lw, lh) {
                 const f = fit
                 if (!bar.vertical) {
-                    return { x: x + lx * f, y: y + 18 + (ly - 18) * f, w: lw * f, h: lh * f }
+                    return { x: x + lx * f, y: y + bar.thick / 2 + (ly - bar.thick / 2) * f, w: lw * f, h: lh * f }
                 }
                 const cx = x + width / 2
-                const cy = y + 18
+                const cy = y + bar.thick / 2
                 const dx = lx - width / 2
-                const dy = ly - 18
+                const dy = ly - bar.thick / 2
                 return { x: cx - (dy + lh) * f, y: cy + dx * f, w: lh * f, h: lw * f }
             }
 
@@ -441,7 +446,7 @@ PanelWindow {
                 if (opacity < 0.02 || blockRep.count <= i) return noBlur
                 const ld = blockRep.itemAt(i)
                 if (!ld || !ld.visible || ld.width < 1 || ld.height < 1) return noBlur
-                const ph = Math.min(ld.height, 30)
+                const ph = Math.min(ld.height, bar.cellH)
                 return toWindowSmooth(ld.x, ld.y + (ld.height - ph) / 2, ld.width, ph)
             }
 
@@ -458,13 +463,13 @@ PanelWindow {
             property real fit: 1
             readonly property real physLen: bar.barLen > 0 ? bar.barLen : (bar.vertical ? barContainer.height : barContainer.width)
             width: physLen / fit
-            height: 36
+            height: bar.thick
             scale: fit
             rotation: bar.vertical ? 90 : 0
 
             transformOrigin: bar.vertical ? Item.Center : Item.Left
-            x: bar.vertical ? barContainer.stripX + 18 - width / 2 : barContainer.stripX
-            y: bar.vertical ? barContainer.stripY + barContainer.height / 2 - 18 : barContainer.stripY
+            x: bar.vertical ? barContainer.stripX + bar.thick / 2 - width / 2 : barContainer.stripX
+            y: bar.vertical ? barContainer.stripY + barContainer.height / 2 - bar.thick / 2 : barContainer.stripY
             opacity: 0.0
 
             Anim {
@@ -502,7 +507,7 @@ PanelWindow {
             property string groupKey: ""
 
             property bool hoverActive: false
-            readonly property real hideDist: (33 + bar.edgeGap - barContainer.peek) / fit
+            readonly property real hideDist: (bar.thick - 3 + bar.edgeGap - barContainer.peek) / fit
 
             readonly property int hideSign: (bar.applied === "bottom" || bar.applied === "left") ? 1 : -1
 
@@ -748,7 +753,7 @@ PanelWindow {
                 width: slideWrapper.width * slideWrapper.fill
                 height: slideWrapper.height
                 x: (slideWrapper.width - width) / 2
-                y: slideWrapper.hideSign * (1 - slideWrapper.bgReveal) * ((36 + bar.edgeGap - barContainer.peek) / slideWrapper.fit)
+                y: slideWrapper.hideSign * (1 - slideWrapper.bgReveal) * ((bar.thick + bar.edgeGap - barContainer.peek) / slideWrapper.fit)
                 color: logic.colGlass
 
                 readonly property var coverPanel: visualRoot.attachedPanel
@@ -827,7 +832,7 @@ PanelWindow {
                     x: hd.x
                     y: hd.y + Math.round((hd.height - height) / 2)
                     width: Math.max(0, tl.x + tl.width - hd.x)
-                    height: 30
+                    height: bar.cellH
                     radius: 6
 
                     readonly property real fade: bar.coverage(
@@ -912,14 +917,18 @@ PanelWindow {
                     onTargetXChanged: x = targetX
                     Component.onCompleted: x = targetX
 
+                    // мгновенно встать на место: на время записи выключаем Behavior (он сам останавливает свою анимацию).
+                    // Раньше тут звали xAnim.stop(), а у анимации внутри Behavior stop() запрещён - Qt сыпал предупреждениями
+                    property bool snapping: false
                     function snap() {
-                        xAnim.stop()
+                        snapping = true
                         x = targetX
+                        snapping = false
                     }
 
                     Behavior on x {
-                        enabled: slideWrapper.animateMove
-                        NumberAnimation { id: xAnim; duration: 280; easing.type: Easing.OutCubic }
+                        enabled: slideWrapper.animateMove && !snapping
+                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
                     }
                     onWidthChanged: slideWrapper.relayout()
                     onItemChanged: slideWrapper.relayout()
@@ -929,6 +938,7 @@ PanelWindow {
 
             SettingsButton {
                 id: settingsBtn
+                rotation: bar.vertical ? -90 : 0
                 x: slideWrapper.width - bar.edgePad - width
 
                 animateColor: slideWrapper.colorAnim
@@ -952,13 +962,156 @@ PanelWindow {
         }
     }
 
+    // =====================================================================
+    //  Вертикальная раскладка блоков (бар на боку)
+    //  Полоса бара у нас повёрнута на 90°, поэтому внутри блоков для бокового бара лежит
+    //  отдельное «прямое» содержимое: оно повёрнуто обратно на -90° и читается как обычно.
+    //  Иконка сверху, короткое значение под ней.
+    // =====================================================================
+
+    // иконка + короткий текст стопкой
+    component BarVStat: Column {
+        id: vs
+        property string icon: ""
+        property string value: ""
+        property real iconSize: 14
+        property real textAlpha: 1.0
+        width: bar.cellH - 4
+        spacing: 2
+
+        Icon {
+            anchors.horizontalCenter: parent.horizontalCenter
+            name: vs.icon
+            size: vs.iconSize
+            color: bar.logic.colAccent
+            dim: 1.3
+
+            Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
+        }
+
+        Text {
+            visible: vs.value !== ""
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: vs.value
+            color: bar.logic.colText
+            opacity: vs.textAlpha
+            font.pixelSize: 10
+            font.bold: true
+            font.family: "JetBrainsMono Nerd Font, Monospace"
+        }
+    }
+
+    // обложка трека (квадрат со скруглением, пока нет картинки - иконка плеера)
+    component BarVCover: Item {
+        id: vc
+        property string artUrl: ""
+        property real size: 26
+        width: size
+        height: size
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: bar.logic.colSecondary
+            opacity: vcImg.status === Image.Ready ? 0.0 : 1.0
+
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            Icon {
+                anchors.centerIn: parent
+                name: "player"
+                size: 14
+                color: bar.logic.colAccent
+                dim: 1.3
+            }
+        }
+
+        Image {
+            id: vcImg
+            anchors.fill: parent
+            source: vc.artUrl
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: true
+            smooth: true
+            mipmap: true
+            sourceSize.width: 96
+            sourceSize.height: 96
+            opacity: status === Image.Ready ? 1.0 : 0.0
+
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: vcMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+            }
+        }
+
+        Item {
+            id: vcMask
+            anchors.fill: parent
+            visible: false
+            layer.enabled: true
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 6
+            }
+        }
+    }
+
+    // значок батареи (рамка + заливка по проценту), та же геометрия, что и в горизонтальном блоке
+    component BarVBat: Item {
+        id: vb
+        property real pct: 0
+        property color tone: "white"
+        property bool charging: false
+        property bool active: true
+        width: 20
+        height: 20
+        readonly property real k: width / 24
+
+        Icon {
+            anchors.fill: parent
+            name: "battery-frame"
+            size: vb.width
+            color: Qt.alpha(vb.tone, 0.75)
+
+            Behavior on color { ColorAnimation { duration: 400 } }
+        }
+
+        Rectangle {
+            id: vbFill
+            x: 4 * vb.k
+            y: 9 * vb.k
+            height: 6 * vb.k
+            width: Math.max(vb.pct > 0 ? 2 : 0, 13 * vb.k * vb.pct / 100)
+            radius: 1.2 * vb.k
+            color: vb.tone
+
+            Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: 400 } }
+
+            SequentialAnimation on opacity {
+                running: vb.charging && vb.active
+                loops: Animation.Infinite
+                NumberAnimation { to: 0.45; duration: 900; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutSine }
+                onRunningChanged: if (!running) vbFill.opacity = 1.0
+            }
+        }
+    }
+
     Component {
         id: cWs
 
                     Item {
                         id: wsContainer
                         readonly property bool shown: opacity > 0
-                        height: 30
+                        height: bar.cellH
                         opacity: settingsMenuComp.showWorkspaces ? 1.0 : 0.0
                         property real expandedWidth: wsRect.implicitWidth
                         width: settingsMenuComp.showWorkspaces ? expandedWidth : 0
@@ -971,7 +1124,7 @@ PanelWindow {
 
                         Rectangle {
                             id: wsRect
-                            height: 30
+                            height: bar.cellH
                             implicitWidth: wsRow.implicitWidth + 16
                             radius: 6
                             color: bar.pillOf(wsContainer)
@@ -1035,10 +1188,10 @@ PanelWindow {
                     Rectangle {
                         id: mprisRect
                         readonly property bool shown: opacity > 0
-                        height: 30
+                        height: bar.cellH
 
                         opacity: settingsMenuComp.showMpris ? 1.0 : 0.0
-                        property real expandedWidth: Math.ceil(mprisRow.implicitWidth + 16)
+                        property real expandedWidth: bar.vertical ? Math.ceil(mpV.height + 14) : Math.ceil(mprisRow.implicitWidth + 16)
                         width: settingsMenuComp.showMpris ? expandedWidth : 0
                         visible: opacity > 0
 
@@ -1090,6 +1243,7 @@ PanelWindow {
 
                         Row {
                             id: mprisRow
+                            visible: !bar.vertical
                             anchors.centerIn: parent
                             spacing: 8
 
@@ -1217,6 +1371,50 @@ PanelWindow {
                             }
                         }
 
+                        // боковой бар: обложка и время стопкой (название трека тут не помещается, оно в панели)
+                        Item {
+                            id: mpV
+                            visible: bar.vertical
+                            rotation: -90
+                            anchors.centerIn: parent
+                            width: bar.cellH - 4
+                            height: mpVCol.implicitHeight
+
+                            Column {
+                                id: mpVCol
+                                width: parent.width
+                                spacing: 3
+
+                                BarVCover {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    artUrl: coverBox.artUrl
+                                }
+
+                                Column {
+                                    visible: mprisRect.player !== null
+                                    anchors.horizontalCenter: parent.horizontalCenter
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: mprisRect.formatTime(mprisRect.currentPos).split(":")[0]
+                                        color: logic.colText
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        font.family: "JetBrainsMono Nerd Font, Monospace"
+                                    }
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: mprisRect.formatTime(mprisRect.currentPos).split(":")[1]
+                                        color: Qt.alpha(logic.colText, 0.7)
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        font.family: "JetBrainsMono Nerd Font, Monospace"
+                                    }
+                                }
+                            }
+                        }
+
                         MouseArea {
                             id: mprisMa
                             anchors.fill: parent
@@ -1248,10 +1446,10 @@ PanelWindow {
                     Rectangle {
                         id: btRect
                         readonly property bool shown: opacity > 0
-                        height: 30
+                        height: bar.cellH
 
                         opacity: settingsMenuComp.showBluetooth ? 1.0 : 0.0
-                        property real expandedWidth: btRowContent.implicitWidth + 16
+                        property real expandedWidth: bar.vertical ? Math.ceil(btV.height + 14) : btRowContent.implicitWidth + 16
                         width: settingsMenuComp.showBluetooth ? expandedWidth : 0
                         visible: opacity > 0
 
@@ -1283,6 +1481,7 @@ PanelWindow {
                         }
                         Row {
                             id: btRowContent
+                            visible: !bar.vertical
                             spacing: 6
                             anchors.centerIn: parent
 
@@ -1314,6 +1513,26 @@ PanelWindow {
                                 Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
                             }
                         }
+                        // боковой бар: иконка, а если у подключённого устройства известен заряд - он под ней
+                        Item {
+                            id: btV
+                            visible: bar.vertical
+                            rotation: -90
+                            anchors.centerIn: parent
+                            width: bar.cellH - 4
+                            height: btVStat.height
+
+                            BarVStat {
+                                id: btVStat
+                                icon: btRect.connectedDev ? "bluetoothOn" : "bluetooth"
+                                iconSize: 16
+                                value: {
+                                    const d = btRect.connectedDev
+                                    return (d && d.batteryPercentage !== undefined && d.batteryPercentage >= 0) ? d.batteryPercentage + "%" : ""
+                                }
+                            }
+                        }
+
                         MouseArea {
                             id: btMa
                             anchors.fill: parent
@@ -1342,7 +1561,7 @@ PanelWindow {
                     Item {
                         id: centerContainer
                         readonly property bool shown: opacity > 0
-                        height: 30
+                        height: bar.cellH
                         opacity: settingsMenuComp.showCenterApp ? 1.0 : 0.0
                         property real expandedWidth: centerPill.implicitWidth
                         width: settingsMenuComp.showCenterApp ? expandedWidth : 0
@@ -1355,8 +1574,8 @@ PanelWindow {
                         Rectangle {
                             id: centerPill
                             anchors.centerIn: parent
-                            height: 30
-                            implicitWidth: appRow.implicitWidth + 20
+                            height: bar.cellH
+                            implicitWidth: bar.vertical ? appV.height + 16 : appRow.implicitWidth + 20
                             radius: 6
                             color: bar.pillOf(centerContainer)
                             topLeftRadius: bar.cornerR(centerContainer, 0, 6)
@@ -1370,8 +1589,159 @@ PanelWindow {
                             Behavior on bottomLeftRadius { NumberAnimation { duration: 120 } }
                             Behavior on bottomRightRadius { NumberAnimation { duration: 120 } }
                             Behavior on color { enabled: slideWrapper.colorAnim; ColorAnimation { duration: 300 } }
+                            // боковой бар: точка статуса и иконка активного окна (название целиком не влезает).
+                            // Иконка меняется кроссфейдом, место под неё раскрывается плавно.
+                            // Если иконку найти не удалось - показываем первую букву названия
+                            Item {
+                                id: appV
+                                visible: bar.vertical
+                                rotation: -90
+                                anchors.centerIn: parent
+                                width: bar.cellH - 4
+                                height: appVCol.implicitHeight
+
+                                readonly property bool idle: logic.displayText === "~ desktop"
+                                readonly property var activeTl: ToplevelManager.activeToplevel
+                                readonly property string rawAppId: idle ? "" : (activeTl && activeTl.appId ? activeTl.appId : "")
+
+                                // при переключении окон activeToplevel на миг пустеет: не реагируем на такие провалы
+                                property string appId: ""
+                                onRawAppIdChanged: appIdTimer.restart()
+                                Component.onCompleted: appId = rawAppId
+                                Timer {
+                                    id: appIdTimer
+                                    interval: 90
+                                    onTriggered: appV.appId = appV.rawAppId
+                                }
+
+                                readonly property var entry: appId !== "" ? DesktopEntries.heuristicLookup(appId) : null
+                                readonly property string iconSrc: {
+                                    if (appId === "") return ""
+                                    const n = entry && entry.icon ? entry.icon : appId
+                                    return Quickshell.iconPath(n, true)
+                                }
+                                readonly property string letter: appId === "" ? ""
+                                    : String(logic.displayText || "").trim().charAt(0).toUpperCase()
+                                readonly property bool hasSlot: appId !== ""
+
+                                Column {
+                                    id: appVCol
+                                    width: parent.width
+                                    spacing: 0
+
+                                    Item {
+                                        width: parent.width
+                                        height: 6
+
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: 6
+                                            height: 6
+                                            radius: 2
+                                            color: appV.idle ? logic.colSecondary : logic.colAccent
+
+                                            Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
+                                        }
+                                    }
+
+                                    // слот под иконку: плавно раскрывается, когда есть активное окно
+                                    Item {
+                                        id: iconSlot
+                                        width: parent.width
+                                        height: appV.hasSlot ? 23 : 0
+                                        clip: true
+
+                                        Behavior on height { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+
+                                        Item {
+                                            id: iconBox
+                                            width: 20
+                                            height: 20
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            anchors.bottom: parent.bottom
+
+                                            property bool showA: true
+                                            property bool pending: false
+                                            readonly property Item target: showA ? imgB : imgA
+
+                                            function flip() {
+                                                pending = false
+                                                showA = !showA
+                                            }
+
+                                            function swap() {
+                                                const src = appV.iconSrc
+                                                target.source = src
+                                                if (src === "" || target.status === Image.Ready || target.status === Image.Error) {
+                                                    flip()
+                                                } else {
+                                                    pending = true
+                                                }
+                                            }
+
+                                            Connections {
+                                                target: appV
+                                                function onIconSrcChanged() { iconBox.swap() }
+                                            }
+
+                                            Component.onCompleted: {
+                                                imgA.source = appV.iconSrc
+                                            }
+
+                                            Image {
+                                                id: imgA
+                                                anchors.fill: parent
+                                                opacity: iconBox.showA && status !== Image.Error ? 1.0 : 0.0
+                                                sourceSize.width: 40
+                                                sourceSize.height: 40
+                                                fillMode: Image.PreserveAspectFit
+                                                asynchronous: true
+                                                smooth: true
+                                                mipmap: true
+                                                scale: iconBox.showA ? 1.0 : 0.85
+
+                                                Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
+                                                Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
+                                                onStatusChanged: if (iconBox.pending && iconBox.target === imgA && status !== Image.Loading) iconBox.flip()
+                                            }
+
+                                            Image {
+                                                id: imgB
+                                                anchors.fill: parent
+                                                opacity: !iconBox.showA && status !== Image.Error ? 1.0 : 0.0
+                                                sourceSize.width: 40
+                                                sourceSize.height: 40
+                                                fillMode: Image.PreserveAspectFit
+                                                asynchronous: true
+                                                smooth: true
+                                                mipmap: true
+                                                scale: iconBox.showA ? 0.85 : 1.0
+
+                                                Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
+                                                Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
+                                                onStatusChanged: if (iconBox.pending && iconBox.target === imgB && status !== Image.Loading) iconBox.flip()
+                                            }
+
+                                            // запасной вариант: буква, когда иконки нет
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: appV.letter
+                                                opacity: appV.iconSrc === "" && appV.letter !== "" ? 1.0 : 0.0
+                                                color: logic.colText
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                font.family: "JetBrainsMono Nerd Font, Monospace"
+
+                                                Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Row {
                                 id: appRow
+                                visible: !bar.vertical
                                 anchors.centerIn: parent
                                 spacing: 6
 
@@ -1408,10 +1778,10 @@ PanelWindow {
                     Item {
                         id: searchContainer
                         readonly property bool shown: opacity > 0
-                        height: 30
+                        height: bar.cellH
                         opacity: settingsMenuComp.showSearch ? 1.0 : 0.0
                         readonly property bool keepOpen: searchWidget.searchOpen
-                        property real expandedWidth: searchWidget.searchOpen ? 220 : 30
+                        property real expandedWidth: searchWidget.searchOpen ? 220 : bar.cellH
                         width: settingsMenuComp.showSearch ? expandedWidth : 0
                         visible: opacity > 0
                         clip: true
@@ -1422,7 +1792,7 @@ PanelWindow {
 
                         Rectangle {
                             id: searchWidget
-                            height: 30
+                            height: bar.cellH
                             radius: 6
                             color: searchWidget.searchOpen && visualRoot.solid ? Qt.alpha(logic.colText, 0.12) : bar.pillOf(searchContainer)
                             topLeftRadius: bar.cornerR(searchContainer, 0, 6)
@@ -1439,7 +1809,7 @@ PanelWindow {
                             anchors.left: parent.left
 
                             property bool searchOpen: false
-                            width: searchOpen ? 220 : 30
+                            width: searchOpen ? 220 : bar.cellH
 
                             Behavior on width {
                                 NumberAnimation {
@@ -1460,11 +1830,12 @@ PanelWindow {
                                 spacing: 4
 
                                 Item {
-                                    width: 30
-                                    height: 30
+                                    width: bar.cellH
+                                    height: bar.cellH
 
                                     Icon {
                                         anchors.centerIn: parent
+                                        rotation: bar.vertical ? -90 : 0
                                         name: "search"
                                         size: 15
                                         color: logic.colAccent
@@ -1540,8 +1911,8 @@ PanelWindow {
 
                     Rectangle {
                         id: rightPill
-                        height: 30
-                        implicitWidth: rightRow.implicitWidth + 20
+                        height: bar.cellH
+                        implicitWidth: bar.vertical ? sysV.height + 18 : rightRow.implicitWidth + 20
                         radius: 6
 
                         readonly property bool keepOpen: calendarComp.visible || sysMenuComp.visible
@@ -1562,6 +1933,7 @@ PanelWindow {
                         Behavior on color { enabled: slideWrapper.colorAnim; ColorAnimation { duration: 300 } }
                         Row {
                             id: rightRow
+                            visible: !bar.vertical
                             anchors.centerIn: parent
                             spacing: 8
 
@@ -1682,8 +2054,137 @@ PanelWindow {
                             }
                         }
 
+                        // боковой бар: раскладка, статы и часы стопкой; часы открывают календарь, статы - системное меню
+                        Item {
+                            id: sysV
+                            visible: bar.vertical
+                            rotation: -90
+                            anchors.centerIn: parent
+                            width: bar.cellH - 4
+                            height: sysVCol.implicitHeight
+
+                            Column {
+                                id: sysVCol
+                                width: parent.width
+                                spacing: 6
+
+                                BarVStat {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    icon: "lang"
+                                    value: logic.langVal
+                                }
+
+                                Rectangle {
+                                    visible: settingsMenuComp.showSystemStats
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 14
+                                    height: 1
+                                    color: Qt.alpha(logic.colText, 0.16)
+                                }
+
+                                Item {
+                                    id: statsV
+                                    visible: settingsMenuComp.showSystemStats
+                                    width: parent.width
+                                    height: statsVCol.implicitHeight + 8
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 6
+                                        color: Qt.alpha(logic.colText, statsVMa.containsMouse || sysMenuComp.visible ? 0.12 : 0.0)
+
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                    }
+
+                                    Column {
+                                        id: statsVCol
+                                        anchors.centerIn: parent
+                                        spacing: 5
+
+                                        BarVStat { icon: "sys"; value: logic.cpuVal }
+                                        BarVStat { icon: "ram"; value: logic.ramVal }
+                                        BarVStat { icon: "gpu"; value: logic.gpuVal }
+                                    }
+
+                                    MouseArea {
+                                        id: statsVMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: sysMenuComp.toggleMenu()
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 14
+                                    height: 1
+                                    color: Qt.alpha(logic.colText, 0.16)
+                                }
+
+                                Item {
+                                    id: clockV
+                                    width: parent.width
+                                    height: clockVCol.implicitHeight + 8
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 6
+                                        color: Qt.alpha(logic.colText, clockVMa.containsMouse || calendarComp.visible ? 0.12 : 0.0)
+
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                    }
+
+                                    Column {
+                                        id: clockVCol
+                                        anchors.centerIn: parent
+                                        spacing: 1
+
+                                        Icon {
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            name: "clock12"
+                                            size: 13
+                                            color: logic.colAccent
+                                            dim: 1.3
+                                        }
+
+                                        // clockText() отдаёт всё сразу ("07:52:42 PM | 10.10"), а нам в столбик нужны только часы,
+                                        // минуты и AM/PM (если 12-часовой формат). Секунды, разделитель и дату отбрасываем
+                                        Repeater {
+                                            model: {
+                                                const parts = String(visualRoot.clockText()).split(/[\s:|]+/).filter(p => p !== "")
+                                                const out = parts.slice(0, 2)
+                                                const ap = parts.find(p => /^(AM|PM)$/i.test(p))
+                                                if (ap) out.push(ap.toUpperCase())
+                                                return out
+                                            }
+
+                                            delegate: Text {
+                                                required property string modelData
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                text: modelData
+                                                color: logic.colText
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                font.family: "JetBrainsMono Nerd Font, Monospace"
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: clockVMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: calendarComp.toggleMenu()
+                                    }
+                                }
+                            }
+                        }
+
                         MouseArea {
                             id: clockMa
+                            enabled: !bar.vertical
                             x: rightRow.x + clockRow.x - 4
                             y: 0
                             width: clockRow.width + 8
@@ -1708,7 +2209,7 @@ PanelWindow {
                             y: 0
                             width: statsContainer.width + 8
                             height: rightPill.height
-                            enabled: statsContainer.visible && statsContainer.width > 20
+                            enabled: !bar.vertical && statsContainer.visible && statsContainer.width > 20
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: sysMenuComp.toggleMenu()
@@ -1729,6 +2230,7 @@ PanelWindow {
 
                     NotifButton {
                         id: notifBtnRoot
+                        rotation: bar.vertical ? -90 : 0
                         colBg: logic.colBg
                         glass: bar.pillOf(notifBtnRoot)
                         animateColor: slideWrapper.colorAnim
@@ -1736,6 +2238,7 @@ PanelWindow {
                         colText: logic.colText
                         colSecondary: logic.colSecondary
                         count: visualRoot.notify.unreadCount
+                        barSide: bar.applied
                         dnd: settingsMenuComp.doNotDisturb
                         anchors.verticalCenter: parent.verticalCenter
 
@@ -1754,10 +2257,10 @@ PanelWindow {
                     Rectangle {
                         id: volRect
                         readonly property bool shown: opacity > 0
-                        height: 30
+                        height: bar.cellH
 
                         opacity: settingsMenuComp.showVolume ? 1.0 : 0.0
-                        property real expandedWidth: volRow.implicitWidth + 20
+                        property real expandedWidth: bar.vertical ? Math.ceil(volV.height + 14) : volRow.implicitWidth + 20
                         width: settingsMenuComp.showVolume ? expandedWidth : 0
                         visible: opacity > 0
 
@@ -1784,6 +2287,7 @@ PanelWindow {
 
                         Row {
                             id: volRow
+                            visible: !bar.vertical
                             anchors.centerIn: parent
                             spacing: 6
 
@@ -1812,6 +2316,24 @@ PanelWindow {
                                     font.bold: true
                                     font.family: "JetBrainsMono Nerd Font, Monospace"
                                 }
+                            }
+                        }
+
+                        // боковой бар: иконка и процент стопкой
+                        Item {
+                            id: volV
+                            visible: bar.vertical
+                            rotation: -90
+                            anchors.centerIn: parent
+                            width: bar.cellH - 4
+                            height: volVStat.height
+
+                            BarVStat {
+                                id: volVStat
+                                icon: visualRoot.volIcon()
+                                iconSize: 16
+                                value: visualRoot.volMuted ? "mute" : visualRoot.volPercent + "%"
+                                textAlpha: visualRoot.volMuted ? 0.5 : 1.0
                             }
                         }
 
@@ -1846,7 +2368,7 @@ PanelWindow {
 
         Rectangle {
             id: batRect
-            height: 30
+            height: bar.cellH
 
             readonly property bool fake: false
             property real fakePct: 100
@@ -1889,7 +2411,7 @@ PanelWindow {
             }
 
             opacity: want ? 1.0 : 0.0
-            property real expandedWidth: batRow.implicitWidth + 20
+            property real expandedWidth: bar.vertical ? Math.ceil(batV.height + 14) : batRow.implicitWidth + 20
             width: want ? expandedWidth : 0
             visible: opacity > 0
 
@@ -1914,6 +2436,7 @@ PanelWindow {
 
             Row {
                 id: batRow
+                visible: !bar.vertical
                 anchors.centerIn: parent
                 spacing: 6
 
@@ -1976,6 +2499,41 @@ PanelWindow {
                 }
             }
 
+            // боковой бар: значок и процент (или время) стопкой
+            Item {
+                id: batV
+                visible: bar.vertical
+                rotation: -90
+                anchors.centerIn: parent
+                width: bar.cellH - 4
+                height: batVCol.implicitHeight
+
+                Column {
+                    id: batVCol
+                    width: parent.width
+                    spacing: 2
+
+                    BarVBat {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        pct: batRect.pct
+                        tone: batRect.tone
+                        charging: batRect.charging
+                        active: batRect.shown
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: batRect.showTime ? batRect.timeText : batRect.pct + "%"
+                        color: batRect.critical ? batRect.tone : logic.colText
+                        font.pixelSize: 10
+                        font.bold: true
+                        font.family: "JetBrainsMono Nerd Font, Monospace"
+
+                        Behavior on color { ColorAnimation { duration: 400 } }
+                    }
+                }
+            }
+
             MouseArea {
                 id: batMa
                 anchors.fill: parent
@@ -2010,6 +2568,9 @@ PanelWindow {
             colSecondary: logic.colSecondary
             colAccent: logic.colAccent
             colText: logic.colText
+            vertical: bar.vertical
+            barSide: bar.applied
+            cellH: bar.cellH
             anchors.verticalCenter: parent.verticalCenter
 
             onClicked: clipPanelComp.toggleMenu()
@@ -2029,6 +2590,9 @@ PanelWindow {
             colSecondary: logic.colSecondary
             colAccent: logic.colAccent
             colText: logic.colText
+            vertical: bar.vertical
+            barSide: bar.applied
+            cellH: bar.cellH
             anchors.verticalCenter: parent.verticalCenter
 
             onClicked: trayPanelComp.toggleMenu()
@@ -2046,10 +2610,10 @@ PanelWindow {
                     || lyricsComp.pinned   // автоскрытие выключено — плашка не пропадает
                     || lyricsPanelComp.visible)   // пока панель открыта плашку не схлопываем, иначе панель теряет привязку и закрывается
             readonly property bool shown: opacity > 0
-            height: 30
+            height: bar.cellH
 
             opacity: want ? 1.0 : 0.0
-            property real expandedWidth: Math.ceil(lyricsRow.implicitWidth + 20)
+            property real expandedWidth: bar.vertical ? bar.cellH : Math.ceil(lyricsRow.implicitWidth + 20)
             width: want ? expandedWidth : 0
             visible: opacity > 0
 
@@ -2097,6 +2661,7 @@ PanelWindow {
 
             Row {
                 id: lyricsRow
+                visible: !bar.vertical
                 anchors.centerIn: parent
                 spacing: 6
 
@@ -2164,6 +2729,19 @@ PanelWindow {
                         }
                     }
                 }
+            }
+
+            // боковой бар: только иконка (строку лирики тут не показать, она в панели)
+            Icon {
+                visible: bar.vertical
+                anchors.centerIn: parent
+                rotation: -90
+                name: "lyrics"
+                size: 17
+                color: logic.colAccent
+                dim: 1.3
+
+                Behavior on color { ColorAnimation { duration: 800; easing.type: Easing.InOutCubic } }
             }
 
             MouseArea {
