@@ -913,7 +913,7 @@ PanelWindow {
                                 return Qt.vector4d(c.r, c.g, c.b, tintA);
                             }
 
-                            fragmentShader: Qt.resolvedUrl("bar_blur.frag.qsb")
+                            fragmentShader: Quickshell.env("HOME") + "/.tech/shell/assets/bar_blur.frag.qsb"
                         }
 
                         // иконка + название + описание
@@ -1181,7 +1181,7 @@ PanelWindow {
                 return Qt.vector4d(c.r, c.g, c.b, tintA);
             }
 
-            fragmentShader: Qt.resolvedUrl("bar_blur.frag.qsb")
+            fragmentShader: Quickshell.env("HOME") + "/.tech/shell/assets/bar_blur.frag.qsb"
         }
 
         Text {
