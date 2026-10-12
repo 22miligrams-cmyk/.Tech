@@ -21,12 +21,23 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
-import "common"          // симлинк launchers/common -> ../common (Paths.qml берётся оттуда)
 
 
 PanelWindow {
     id: root
 
+
+    // пути шелла (раньше шли из common/Paths.qml через симлинк launchers/common, его больше нет)
+    QtObject {
+        id: paths
+        readonly property string home: Quickshell.env("HOME")
+        readonly property string cache: home + "/.cache/quickshell"
+        readonly property string data: Quickshell.env("XDG_DATA_HOME") || (home + "/.local/share")
+        readonly property string launchers: data + "/qs-launchers"
+        readonly property string wallDirFile: launchers + "/wall-dir.txt"
+        readonly property string wallpapers: home + "/Изображения/wallpapers"
+        readonly property string icons: home + "/.tech/shell/icons"
+    }
     // ── Режим демона (как у laun.qml) ────────────────────────────────
     // Пока окно не показано: не рисуется, ничего не опрашивает, карточек и картинок нет
     // (модель пустая -> память свободна).
@@ -76,7 +87,7 @@ PanelWindow {
     // Применяет папку из настроек (пусто/нет файла -> папка по умолчанию) и пересканирует
     function applyWallDir(raw) {
         let d = (raw || "").trim().replace(/\/+$/, "")
-        if (d === "") d = Paths.wallpapers
+        if (d === "") d = paths.wallpapers
         if (d === wallpaperDir) return   // папка та же — скан уже идёт/прошёл
         wallpaperDir = d
         rawWallpaperList = []            // старая папка — старые карточки не показываем
@@ -85,7 +96,7 @@ PanelWindow {
 
     FileView {
         id: wallDirFile
-        path: Paths.wallDirFile
+        path: paths.wallDirFile
         onLoaded: root.applyWallDir(text())
         onLoadFailed: root.applyWallDir("")    // файла ещё нет — значит папка по умолчанию
     }
@@ -125,8 +136,8 @@ PanelWindow {
     // colors.py лежит рядом с этим файлом (путь считается от расположения wall.qml)
     readonly property string colorScript: decodeURIComponent(Qt.resolvedUrl("colors.py").toString().replace(/^file:\/\//, ""))
 
-    // папка с обоями: берётся из настроек (карточка «Папка обоев»), по умолчанию Paths.wallpapers
-    property string wallpaperDir: Paths.wallpapers
+    // папка с обоями: берётся из настроек (карточка «Папка обоев»), по умолчанию paths.wallpapers
+    property string wallpaperDir: paths.wallpapers
     property var rawWallpaperList: []
     property var scanBuf: []
     property var colorPalettes: ({})
@@ -334,7 +345,7 @@ PanelWindow {
     // Текущие обои через swww (запускается только при открытии)
     Process {
         id: currentWallProc
-        command: ["bash", "-c", "swww query | grep -oP 'image: \\K.*' || echo ''"]
+        command: ["bash", "-c", "$(command -v awww || command -v swww) query | grep -oP 'image: \\K.*' || echo ''"]
         stdout: SplitParser {
             onRead: data => {
                 let path = data.trim()
@@ -348,7 +359,7 @@ PanelWindow {
 
     FileView {
         id: paletteFile
-        path: Paths.cache + "/palettes.json"
+        path: paths.cache + "/palettes.json"
 
         onLoaded: {
             try {
@@ -439,7 +450,7 @@ PanelWindow {
             "bash", "-c",
             "export XDG_RUNTIME_DIR=/run/user/$(id -u);" +
             "export WAYLAND_DISPLAY=$(ls /run/user/$(id -u)/wayland-* 2>/dev/null | head -n1 | xargs basename);" +
-            "setsid -f swww img \"$1\" --transition-type \"$3\" --transition-pos 0.5,0.5 --transition-duration \"$4\" >/dev/null 2>&1; " +
+            "setsid -f $(command -v awww || command -v swww) img \"$1\" --transition-type \"$3\" --transition-pos 0.5,0.5 --transition-duration \"$4\" >/dev/null 2>&1; " +
             "setsid -f python3 \"$2\" \"$1\" > /tmp/color_error.log 2>&1",
             "_", root.selectedWallpaperPath, root.colorScript, root.transitionType, String(root.transitionDuration)
         ]
@@ -452,7 +463,7 @@ PanelWindow {
     // ── Настройки из меню настроек (вкладка «Лаунчеры») ──────────────
     property string transitionType: "grow"
     property real transitionDuration: 1.5
-    readonly property string settingsPath: Paths.launchers + "/settings.json"
+    readonly property string settingsPath: paths.launchers + "/settings.json"
 
     FileView {
         id: settingsFile
@@ -504,7 +515,7 @@ PanelWindow {
                 Image {
                     anchors.centerIn: parent
                     width: 16;  height: 16
-                    source: "file://" + Paths.icons + "/grid.svg"
+                    source: "file://" + paths.icons + "/grid.svg"
                     sourceSize: Qt.size(32, 32)
                     fillMode: Image.PreserveAspectFit
                     smooth: true

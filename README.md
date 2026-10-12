@@ -11,16 +11,16 @@
   <img alt=".Tech" src="assets/Screens/banner-light.svg">
 </picture>
 
-
 [![License: MIT](https://img.shields.io/badge/license-MIT-a3cef1.svg)](LICENSE)
 [![Hyprland](https://img.shields.io/badge/Hyprland-0.55%2B-3d5a80.svg)](https://hypr.land)
 [![Quickshell](https://img.shields.io/badge/Quickshell-QML-181825.svg)](https://quickshell.org)
+[![Version](https://img.shields.io/badge/version-1.5.3-e0e1dd.svg)](#обновление)
+
+<sub>Собрано вручную, баг за багом, апдейт за апдейтом · Handbuilt, bug by bug, update by update</sub>
 
 [Русский](#русский) · [English](#english)
 
 </div>
-
-<!-- Добавь скриншот: ![preview](assets/preview.png) -->
 
 ![preview](assets/Screens/preview.png)
 
@@ -37,6 +37,54 @@
 `.Tech` — рабочий стол для [Hyprland](https://hypr.land), целиком на QML и [Quickshell](https://quickshell.org). Панель, всплывающие окошки, лаунчеры, уведомления, настройки. Есть русский и английский.
 
 Я делаю его под себя и выкладываю как есть, так что углы местами шершавые. Нашёл баг или есть идея — заводи [issue](https://github.com/22miligrams-cmyk/.Tech/issues), мне важно.
+
+<p align="center"><sub>⬇ дальше: возможности → установка → мини-туториалы → остальное ⬇</sub></p>
+
+### ✨ Возможности
+
+<details open>
+<summary><b>Панель и лаунчеры</b></summary>
+
+- **Панель (Bar)** из отдельных блоков-плашек: системный монитор, часы, язык, трей, батарея, сеть и т.д. Соседние блоки можно склеивать в одну капсулу.
+- **Редактор раскладки** прямо в настройках — блоки таскаются мышкой между зонами лево/центр/право, порядок внутри зоны тоже меняется перетаскиванием.
+- **Режим «остров»** — переключатель: либо панель плавает отдельными плашками, либо прижимается к краям экрана сплошной полосой.
+- **Лаунчер приложений** с размытием на собственном шейдере (`bar_blur.frag`), тот же шейдер, что и у панели — никакого размытия от композитора.
+- **Выбор обоев** со своим превью-гридом.
+
+</details>
+
+<details open>
+<summary><b>Обои и цвета</b></summary>
+
+- Цветовая схема вытаскивается **из самих обоев** (`color.py` → `colors.json` / `palettes.json`), шелл перекрашивается целиком следом.
+- Поддержка нескольких палитр на одни обои.
+
+</details>
+
+<details open>
+<summary><b>Панели и виджеты</b></summary>
+
+- **Центр уведомлений** и всплывающие нотификации с «Не беспокоить», который реально глушит звук (даже у мессенджеров — через PipeWire).
+- **Календарь** с заметками и будильниками, включая будильники «на один раз».
+- **Плеер (MPRIS)** с кольцом из «прыгающих» полосок вокруг обложки, которое реагирует на настоящий звук системы (20 полос, без cava).
+- **Тексты песен / караоке** с автоматической подгрузкой LRC.
+- **Буфер обмена** — горизонтальная карусель карточек с текстом и картинками, история сохраняется.
+- **Обзор рабочих столов** с живыми превью окон (без рамок, тонкая полоска вместо больших цифр).
+- **Alt+Tab** в стиле Windows — переключение окон по удержанию модификатора.
+- **Центр управления**: громкость, Bluetooth, системный монитор, трей — всё в один клик.
+- **Экран блокировки.**
+
+</details>
+
+<details open>
+<summary><b>Под капотом</b></summary>
+
+- **Самообновление**: шелл сам проверяет GitHub и предлагает обновиться прямо из настроек, уведомление об апдейте пробивает «Не беспокоить».
+- Свои **шейдеры** (размытие, эффект воды) вместо эффектов композитора.
+- **Параллакс** можно включать/выключать отдельно для каждой панели через IPC.
+- Полностью **двуязычный интерфейс** (RU/EN), один клик — и всё переведено.
+
+</details>
 
 ### Что нужно, чтобы это завелось
 
@@ -79,6 +127,106 @@ curl -fsSL https://raw.githubusercontent.com/22miligrams-cmyk/.Tech/main/install
 Через `curl | bash` флаги передаются так: `curl -fsSL …/install.sh | bash -s -- -y`
 
 **Переменные:** `TECH_LANG=ru` или `en` (язык без вопроса), `TECH_DIR=/путь` (куда ставить, по умолчанию `~/.tech/shell`).
+
+### 🧭 Мини-туториалы
+
+Коротко — как делать самое частое. Всё это доступно сразу после установки, ничего отдельно настраивать не нужно.
+
+<details>
+<summary><b>Переставить блоки на панели</b></summary>
+
+1. Открой настройки → карточка раскладки панели.
+2. Там три зоны — **лево / центр / право** — и плашка на каждый блок панели.
+3. Тащи плашку мышкой в нужную зону или на новое место внутри зоны — порядок меняется сразу.
+4. Хочешь склеить два соседних блока в одну капсулу — кликни между ними.
+5. Плашки не влезают с подписями — редактор сам уйдёт в компактный режим (только иконки).
+6. Выключить блок совсем, но запомнить его место — переключатель рядом с плашкой.
+
+</details>
+
+<details>
+<summary><b>Включить режим «остров»</b></summary>
+
+В тех же настройках панели — переключатель **«Остров»** (включён по умолчанию).
+- **Включено** — блоки панели плавают отдельными плашками с отступами от края.
+- **Выключено** — плашки одной группы вытягиваются до самого края экрана, ближний к краю угол становится прямым. Позиция блоков при этом не меняется.
+
+</details>
+
+<details>
+<summary><b>Поменять обои и получить новую палитру</b></summary>
+
+1. Открой выбор обоев (лаунчер обоев в баре или по IPC, см. ниже).
+2. Выбери картинку — она станет обоями, и следом автоматически посчитается новая палитра (`colors.json`), шелл перекрасится.
+3. Палитру можно поменять и руками — она лежит в `~/.cache/quickshell/colors.json`, ключи `bg`, `accent`, `text`, `secondary`. Сохранил файл — цвета обновились сами, перезапускать шелл не нужно.
+
+</details>
+
+<details>
+<summary><b>Не пропустить важное во время «Не беспокоить»</b></summary>
+
+«Не беспокоить» в настройках режет все обычные уведомления и глушит звук мессенджеров через PipeWire. Но два исключения специально пробивают его:
+- уведомление о новой версии шелла;
+- будильник из календаря.
+
+Включить/выключить DND можно и из терминала: `quickshell ipc -p ~/.tech/shell call shell dnd`.
+
+</details>
+
+<details>
+<summary><b>Поставить будильник «на один раз»</b></summary>
+
+1. Открой календарь.
+2. Добавь напоминание и выбери тип «на один раз» вместо повторяющегося.
+3. В момент срабатывания появится отдельное всплывающее окно поверх всего — оно пробивает «Не беспокоить», так что не пропустишь.
+
+</details>
+
+<details>
+<summary><b>Посмотреть, как плеер реагирует на звук</b></summary>
+
+Просто включи что-нибудь со звуком и открой панель плеера (значок трека в баре или `quickshell ipc -p ~/.tech/shell call shell player`). Кольцо вокруг обложки альбома само начнёт прыгать в такт — оно слушает реальный звук системы через PipeWire, никакой отдельной настройки не требуется.
+
+</details>
+
+<details>
+<summary><b>Открывать панели с клавиатуры</b></summary>
+
+Все панели открываются одной IPC-командой, значит на них легко повесить хоткеи в `hyprland.lua`/`hyprland.conf`. Общий вид:
+
+```bash
+quickshell ipc -p ~/.tech/shell call shell <команда>
+```
+
+| Команда | Что открывает |
+|---|---|
+| `calendar` | Календарь |
+| `volume` | Громкость |
+| `player` | Плеер (MPRIS) |
+| `lyrics` | Текст песни / караоке |
+| `notifications` | Центр уведомлений |
+| `clipboard` | Буфер обмена |
+| `tray` | Системный трей |
+| `bluetooth` | Bluetooth |
+| `workspaces` | Обзор рабочих столов |
+| `settings` | Настройки |
+| `controlCenter` | Центр управления |
+| `alttab` / `alttabPrev` | Alt+Tab вперёд / назад |
+| `dnd` | Переключить «Не беспокоить» |
+
+Пример бинда (Hyprland 0.55+, `hyprland.lua`):
+
+```lua
+hl.bind("SUPER", "V", "exec", "quickshell ipc -p ~/.tech/shell call shell clipboard")
+```
+
+Старый формат (`hyprland.conf`):
+
+```ini
+bind = SUPER, V, exec, quickshell ipc -p ~/.tech/shell call shell clipboard
+```
+
+</details>
 
 ### Обновление
 
@@ -236,6 +384,54 @@ rm -f ~/.config/quickshell/tech
 
 I build it for myself and share it as is, so some edges are rough. Found a bug or have an idea? Open an [issue](https://github.com/22miligrams-cmyk/.Tech/issues).
 
+<p align="center"><sub>⬇ next up: features → install → mini tutorials → the rest ⬇</sub></p>
+
+### ✨ Features
+
+<details open>
+<summary><b>Bar & launchers</b></summary>
+
+- **Bar** built from separate pill blocks: system monitor, clock, language, tray, battery, network and more. Neighboring blocks can be merged into one capsule.
+- **Layout editor** right inside settings — drag blocks between the left/center/right zones, reorder within a zone by dragging too.
+- **"Island" mode** toggle — either the bar floats as separate pills, or it hugs the screen edges as one continuous strip.
+- **App launcher** blurred with its own custom shader (`bar_blur.frag`), the same one the bar uses — no compositor blur involved.
+- **Wallpaper picker** with its own preview grid.
+
+</details>
+
+<details open>
+<summary><b>Wallpapers & color</b></summary>
+
+- The color scheme is extracted **straight from your wallpaper** (`color.py` → `colors.json` / `palettes.json`), and the whole shell recolors to match.
+- Multiple palettes per wallpaper are supported.
+
+</details>
+
+<details open>
+<summary><b>Panels & widgets</b></summary>
+
+- **Notification center** and pop-up notifications, with a Do Not Disturb that actually mutes audio (even messenger sounds, via PipeWire).
+- **Calendar** with notes and alarms, including one-shot "fire once" alarms.
+- **Media player (MPRIS)** with a ring of bars around the album art that jumps to real system audio (20 bands, no cava).
+- **Lyrics / karaoke** panel with automatic LRC fetching.
+- **Clipboard manager** — a horizontal carousel of text and image cards, with history.
+- **Workspaces overview** with live window thumbnails (no borders, a thin stripe instead of big numbers).
+- **Windows-style Alt+Tab** window switching.
+- **Control Center**: volume, Bluetooth, system monitor, tray — all in one place.
+- **Lock screen.**
+
+</details>
+
+<details open>
+<summary><b>Under the hood</b></summary>
+
+- **Self-updating**: the shell checks GitHub on its own and offers to update right from Settings; the update notification breaks through Do Not Disturb.
+- Custom **shaders** (blur, a water effect) instead of compositor effects.
+- **Parallax** can be toggled per panel over IPC.
+- Fully **bilingual UI** (RU/EN) — one click and everything's translated.
+
+</details>
+
 ### What you need
 
 - **Hyprland 0.55+** (the config is Lua, `hyprland.lua`, from that version; the old `hyprland.conf` still works)
@@ -267,6 +463,106 @@ Or download `install.sh`, read it, and run `bash install.sh`.
 
 **Flags:** `-y` / `--yes` (no questions), `--dry-run` (change nothing, just show), `--auto-update` / `--no-auto-update` (answer the update question up front), `--help`. With `curl | bash`: `… | bash -s -- -y`.
 **Env:** `TECH_LANG=ru|en`, `TECH_DIR=<install dir>`.
+
+### 🧭 Mini tutorials
+
+The quick version of the most common things. All of this works right after install — nothing extra to set up.
+
+<details>
+<summary><b>Rearrange bar blocks</b></summary>
+
+1. Open Settings → the bar layout card.
+2. You'll see three zones — **left / center / right** — and a tile for each bar block.
+3. Drag a tile into another zone, or to a new spot in the same zone — the order updates live.
+4. Want to merge two neighboring blocks into one capsule? Click the gap between them.
+5. If labeled tiles don't fit, the editor drops into compact mode (icons only) automatically.
+6. Turn a block off entirely while keeping its spot remembered — use the toggle next to its tile.
+
+</details>
+
+<details>
+<summary><b>Turn on "island" mode</b></summary>
+
+Same bar settings card — the **"Island"** toggle (on by default).
+- **On** — bar blocks float as separate pills with padding from the screen edge.
+- **Off** — blocks in a group stretch all the way to the edge, and the edge-side corner of the group goes square. Block position otherwise stays the same.
+
+</details>
+
+<details>
+<summary><b>Change wallpaper and get a new palette</b></summary>
+
+1. Open the wallpaper picker (from the bar, or over IPC — see below).
+2. Pick an image — it becomes your wallpaper, and a new palette (`colors.json`) is computed right after, recoloring the shell.
+3. You can also edit the palette by hand — it lives at `~/.cache/quickshell/colors.json`, keys `bg`, `accent`, `text`, `secondary`. Save the file and the colors update on their own, no restart needed.
+
+</details>
+
+<details>
+<summary><b>Don't miss anything important during Do Not Disturb</b></summary>
+
+Do Not Disturb (in Settings) blocks regular notifications and mutes messenger audio over PipeWire. Two things are deliberately allowed through anyway:
+- the shell-update notification;
+- a calendar alarm.
+
+You can also toggle DND from a terminal: `quickshell ipc -p ~/.tech/shell call shell dnd`.
+
+</details>
+
+<details>
+<summary><b>Set a one-shot alarm</b></summary>
+
+1. Open the calendar.
+2. Add a reminder and pick "once" instead of a repeating schedule.
+3. When it fires, a dedicated pop-up appears on top of everything — it breaks through Do Not Disturb, so you won't miss it.
+
+</details>
+
+<details>
+<summary><b>See the player react to audio</b></summary>
+
+Play anything with sound and open the player panel (the track icon in the bar, or `quickshell ipc -p ~/.tech/shell call shell player`). The ring around the album art starts jumping with the beat on its own — it listens to real system audio over PipeWire, nothing else to configure.
+
+</details>
+
+<details>
+<summary><b>Open panels from the keyboard</b></summary>
+
+Every panel opens with one IPC call, so it's easy to bind hotkeys for them in `hyprland.lua` / `hyprland.conf`. General shape:
+
+```bash
+quickshell ipc -p ~/.tech/shell call shell <command>
+```
+
+| Command | Opens |
+|---|---|
+| `calendar` | Calendar |
+| `volume` | Volume |
+| `player` | Media player (MPRIS) |
+| `lyrics` | Lyrics / karaoke |
+| `notifications` | Notification center |
+| `clipboard` | Clipboard manager |
+| `tray` | System tray |
+| `bluetooth` | Bluetooth |
+| `workspaces` | Workspaces overview |
+| `settings` | Settings |
+| `controlCenter` | Control Center |
+| `alttab` / `alttabPrev` | Alt+Tab forward / back |
+| `dnd` | Toggle Do Not Disturb |
+
+Example bind (Hyprland 0.55+, `hyprland.lua`):
+
+```lua
+hl.bind("SUPER", "V", "exec", "quickshell ipc -p ~/.tech/shell call shell clipboard")
+```
+
+Legacy format (`hyprland.conf`):
+
+```ini
+bind = SUPER, V, exec, quickshell ipc -p ~/.tech/shell call shell clipboard
+```
+
+</details>
 
 ### Updates
 
@@ -319,6 +615,54 @@ end)
 ```ini
 # ~/.config/hypr/hyprland.conf  (legacy)
 exec-once = quickshell -p '/home/USER/.tech/shell'
+```
+
+### Manual install
+
+Without the installer:
+
+1. Install the dependencies and JetBrainsMono Nerd Font.
+2. Clone the repo:
+   ```bash
+   git clone https://github.com/22miligrams-cmyk/.Tech.git ~/.tech/shell
+   ```
+3. Build the shaders:
+   ```bash
+   cd ~/.tech/shell
+   find . -type f \( -name '*.frag' -o -name '*.vert' \) -exec sh -c 'qsb --qt6 -o "$1.qsb" "$1"' _ {} \;
+   ```
+4. Drop starter colors into `~/.cache/quickshell/colors.json`:
+   ```json
+   {
+     "bg": "#181825",
+     "accent": "#a3cef1",
+     "text": "#e0e1dd",
+     "secondary": "#3d5a80"
+   }
+   ```
+5. Run it: `quickshell -d -p ~/.tech/shell`
+
+### Colors
+
+The palette comes from `~/.cache/quickshell/colors.json` (keys `bg`, `accent`, `text`, `secondary`). Change the values and the colors update.
+
+### Where things live
+
+```
+shell.qml        entry point
+Bar.qml          the bar
+Logic.qml        logic and state
+Visual.qml       UI assembly
+v.version        version (drives updates)
+assets/ icons/   assets and icons
+bar/ panels/     bar and popup panels
+launchers/       launchers
+notifications/   notifications
+settings/        settings (incl. the About card)
+updater/         update checking and installing
+lang/            translations (LangRu.qml, LangEn.qml)
+lrc/             song lyrics
+common/          shared components
 ```
 
 ### Troubleshooting
