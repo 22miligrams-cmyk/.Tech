@@ -15,6 +15,7 @@
 # и, если они не совпали, предложит снести всё и поставить заново (обновление).
 # Язык берётся из $LANG (принудительно: TECH_LANG=ru или TECH_LANG=en), папка установки — TECH_DIR.
 # Пакеты, которые проверяются, перечислены в массиве DEPS ниже — правь его под свои нужды.
+# Обои: шаг «wall» ставит демон awww (бывший swww) и прописывает его автозапуск в конфиг Hyprland.
 
 set -uo pipefail
 
@@ -181,6 +182,33 @@ RU[ask_autoupd]="Проверять обновления .Tech автомати�
 RU[autoupd_on]="Автопроверка обновлений включена. Выключить: quickshell ipc -p %s call updater autoOff"
 RU[autoupd_off]="Автопроверка обновлений выключена. Включить: quickshell ipc -p %s call updater autoOn"
 RU[bye]="Готово! Удачи и приятного пользования ✨"
+RU[step_wall]="Обои: демон awww/swww (установка, автозапуск, запуск)"
+RU[stg_pkgs]="Пакеты"
+RU[stg_font]="Шрифт"
+RU[stg_wall]="Обои"
+RU[stg_shaders]="Шейдеры"
+RU[stg_link]="Ссылка"
+RU[stg_colors]="Цвета"
+RU[stg_auto]="Автозапуск"
+RU[stg_launch]="Запуск"
+RU[stg_repo]="Загрузка"
+RU[wall_have]="Демон обоев найден: %s"
+RU[wall_try]="Ставлю демон обоев awww (раньше он назывался swww)…"
+RU[wall_aur]="awww нет в основных репозиториях, пробую AUR (%s)…"
+RU[wall_fail]="Не получилось поставить awww/swww — обои из лаунчера работать не будут. Инструкция: https://codeberg.org/LGFae/awww"
+RU[wall_auto_ok]="Автозапуск демона обоев (%s) добавлен. Бэкап: %s"
+RU[wall_auto_has]="В %s уже запускается демон обоев — не трогаю."
+RU[wall_auto_other]="В %s уже запускается другой менеджер обоев (%s). Лаунчер обоев шелла работает через awww/swww — демон добавлю, но вместе они работать не смогут — оставь что-то одно."
+RU[wall_auto_noconf]="Не нашёл конфиг Hyprland. Добавь автозапуск демона обоев вручную (hyprland.lua или hyprland.conf):"
+RU[wall_running]="Демон обоев уже работает."
+RU[wall_started]="Демон обоев запущен."
+RU[wall_start_fail]="Демон обоев не стартовал. Запусти вручную: %s"
+RU[wall_nosession]="Сейчас нет Wayland-сессии — демон обоев стартует сам при входе в Hyprland."
+RU[sum_title]="Итог"
+RU[sum_ok]="сделано"
+RU[sum_fail]="не вышло"
+RU[sum_skip]="пропущено"
+RU[sum_done]="уже было"
 
 EN[lang_prompt]="Выбери язык / Choose language"
 EN[invalid]="Didn't get that, enter 1 or 2."
@@ -266,6 +294,33 @@ EN[ask_autoupd]="Check for .Tech updates automatically (on shell start and every
 EN[autoupd_on]="Automatic update checks are on. Turn off: quickshell ipc -p %s call updater autoOff"
 EN[autoupd_off]="Automatic update checks are off. Turn on: quickshell ipc -p %s call updater autoOn"
 EN[bye]="Done! Good luck and enjoy ✨"
+EN[step_wall]="Wallpapers: awww/swww daemon (install, autostart, start)"
+EN[stg_pkgs]="Packages"
+EN[stg_font]="Font"
+EN[stg_wall]="Wallpapers"
+EN[stg_shaders]="Shaders"
+EN[stg_link]="Link"
+EN[stg_colors]="Colors"
+EN[stg_auto]="Autostart"
+EN[stg_launch]="Launch"
+EN[stg_repo]="Download"
+EN[wall_have]="Wallpaper daemon found: %s"
+EN[wall_try]="Installing the awww wallpaper daemon (formerly swww)…"
+EN[wall_aur]="awww is not in the main repos, trying AUR (%s)…"
+EN[wall_fail]="Could not install awww/swww — the wallpaper launcher will not work. Instructions: https://codeberg.org/LGFae/awww"
+EN[wall_auto_ok]="Wallpaper daemon (%s) autostart added. Backup: %s"
+EN[wall_auto_has]="%s already launches a wallpaper daemon — leaving it alone."
+EN[wall_auto_other]="%s already launches another wallpaper tool (%s). The shell's wallpaper launcher works through awww/swww — adding the daemon, but they cannot run together — keep only one."
+EN[wall_auto_noconf]="Could not find a Hyprland config. Add the wallpaper daemon autostart manually (hyprland.lua or hyprland.conf):"
+EN[wall_running]="Wallpaper daemon is already running."
+EN[wall_started]="Wallpaper daemon started."
+EN[wall_start_fail]="Wallpaper daemon did not start. Run it manually: %s"
+EN[wall_nosession]="No Wayland session right now — the wallpaper daemon will start by itself when you log in to Hyprland."
+EN[sum_title]="Summary"
+EN[sum_ok]="done"
+EN[sum_fail]="failed"
+EN[sum_skip]="skipped"
+EN[sum_done]="already there"
 
 # ── помощники ───────────────────────────────────────────────────────────
 t()  { if [[ $L == ru ]]; then printf '%s' "${RU[$1]}"; else printf '%s' "${EN[$1]}"; fi; }
@@ -315,14 +370,24 @@ hypr_version() {
 }
 
 # ── выбор шагов ─────────────────────────────────────────────────────────
-STEPS=(pkgs font shaders link colors auto launch)
+STEPS=(pkgs font wall shaders link colors auto launch)
 declare -A SEL
 declare -A DONE   # шаги, которые уже сделаны — их пропускаем
 for _k in "${STEPS[@]}"; do SEL[$_k]=1; done
 
 want() { [[ "${SEL[$1]:-0}" == 1 ]]; }
 
-hr() { printf '%s━━ %s %s' "$C_B" "$1" "$C_ACC"; printf '━%.0s' $(seq 1 $(( 58 - ${#1} ))); printf '%s\n' "$C_RST"; }
+hr() { local n=$(( 58 - ${#1} )); (( n < 3 )) && n=3; printf '%s━━ %s %s' "$C_B" "$1" "$C_ACC"; printf '━%.0s' $(seq 1 "$n"); printf '%s\n' "$C_RST"; }
+
+# заголовок шага со счётчиком: ━━ [3/8] Обои ━━━━━━━━  (счёт — только по выбранным шагам)
+STAGE_N=0; STAGE_TOTAL=0
+stage() {   # stage <ключ шага>
+    STAGE_N=$(( STAGE_N + 1 ))
+    echo; hr "[$STAGE_N/$STAGE_TOTAL] $(t "stg_$1")"
+}
+
+# итог по шагам: RESULT[ключ]=ok|fail
+declare -A RESULT
 
 # пометка справа от пункта меню
 step_note() {
@@ -330,6 +395,35 @@ step_note() {
         printf '%s(%s)%s' "$C_WARN" "$(printf "$(t note_missing)" "$DEP_MISS")" "$C_RST"
     fi
     return 0
+}
+
+# ── обои: демон awww (раньше swww) ──────────────────────────────────────
+# у новых версий бинарники awww / awww-daemon, у старых swww / swww-daemon
+WALL_BIN=""; WALL_DAEMON=""
+find_wall_bin() {
+    local n
+    for n in awww swww; do
+        if command -v "$n" >/dev/null 2>&1 && command -v "$n-daemon" >/dev/null 2>&1; then
+            WALL_BIN="$n"; WALL_DAEMON="$n-daemon"; return 0
+        fi
+    done
+    return 1
+}
+
+# все конфиги Hyprland без комментариев (hyprland.lua/.conf и то, что рядом; бэкапы *.bak-* не считаются)
+conf_active() {
+    local f
+    while IFS= read -r f; do grep -v '^[[:space:]]*\(--\|#\)' "$f" 2>/dev/null; done < <(
+        find "$HYPR_DIR" -maxdepth 2 -type f \( -name '*.lua' -o -name '*.conf' \) 2>/dev/null)
+}
+wall_in_conf() { conf_active | grep -qE '(awww|swww)-daemon|(awww|swww)[[:space:]]+init'; }
+
+# бэкап конфига Hyprland делаем один раз за запуск: и обои, и шелл правят один файл
+HYPR_BAK=""
+backup_conf() {   # backup_conf <файл>
+    [[ -n "$HYPR_BAK" ]] && return 0
+    HYPR_BAK="$1.bak-$(date +%Y%m%d-%H%M%S)"
+    run cp -- "$1" "$HYPR_BAK"
 }
 
 # что уже сделано: такие шаги не выбираем и пропускаем
@@ -340,6 +434,7 @@ detect_done() {
     q="$HOME/.config/quickshell/$CONF_NAME"
     if [[ -L "$q" && "$(readlink -f "$q")" == "$(readlink -f "$INSTALL_DIR")" ]]; then DONE[link]=1; fi
     [[ -e "$HOME/.cache/quickshell/colors.json" ]] && DONE[colors]=1
+    if find_wall_bin && wall_in_conf; then DONE[wall]=1; fi
     for f in "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hypr/hyprland.conf"; do
         if [[ -f "$f" ]] && grep -v '^[[:space:]]*\(--\|#\)' "$f" | grep -q 'quickshell'; then DONE[auto]=1; fi
     done
@@ -644,17 +739,30 @@ show_deps() {
         ok all_ok
     fi
 }
+# конфиг Hyprland: Lua с 0.55, hyprlang — для старых версий (нужен и шагу «обои», и шагу «автозапуск»)
+HYPR_DIR="$HOME/.config/hypr"
+HLUA="$HYPR_DIR/hyprland.lua"
+HCONF="$HYPR_DIR/hyprland.conf"
+if   [[ -f "$HLUA"  ]]; then TARGET="$HLUA";  KIND="lua"
+elif [[ -f "$HCONF" ]]; then TARGET="$HCONF"; KIND="conf"
+else TARGET=""; KIND=""
+fi
+
 show_deps
 detect_done
 
 # ── 3c. выбор шагов (без -y и только если есть терминал) ───────────────
 (( ASSUME_YES )) || choose_steps
 
+# сколько шагов реально будет выполнено — для заголовков [n/N]
+for _k in "${STEPS[@]}"; do want "$_k" && STAGE_TOTAL=$(( STAGE_TOTAL + 1 )); done
+[[ -d "$INSTALL_DIR/.git" ]] || STAGE_TOTAL=$(( STAGE_TOTAL + 1 ))   # шаг «Загрузка» (клонирование)
+
 # ── 4. установка недостающего ──────────────────────────────────────────
+want pkgs && stage pkgs
 if (( HAVE_MISSING == 0 )); then
     :
 elif [[ -n "$PM" ]]; then
-    echo
     if want pkgs; then
         say installing
         FAIL=0
@@ -686,16 +794,16 @@ elif [[ -n "$PM" ]]; then
                 warn qs_manual
             fi
         fi
-        (( FAIL )) && warn install_fail
+        if (( FAIL )); then warn install_fail; RESULT[pkgs]=fail; else RESULT[pkgs]=ok; fi
     else
         warn skip_install
     fi
 else
-    echo; warn skip_install
+    warn skip_install
 fi
 
 # ── 4b. шрифт JetBrainsMono Nerd Font (иконки в баре и меню) ───────────
-echo
+want font && stage font
 if ! want font; then
     :
 elif command -v fc-list >/dev/null 2>&1 && fc-list 2>/dev/null | grep -qi 'JetBrainsMono Nerd'; then
@@ -706,28 +814,98 @@ elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1 && comman
     FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz"
     if (( DRY_RUN )); then
         printf '%s+ download %s -> %s%s\n' "$C_ACC" "$FONT_URL" "$FONT_DIR" "$C_RST"
+        RESULT[font]=ok
     else
         FONT_TMP="$(mktemp)"
         if mkdir -p "$FONT_DIR" && curl -fsSL "$FONT_URL" -o "$FONT_TMP" \
            && tar -xJf "$FONT_TMP" -C "$FONT_DIR" --wildcards '*.ttf'; then
             command -v fc-cache >/dev/null 2>&1 && fc-cache -f "$FONT_DIR" >/dev/null 2>&1
-            ok font_ok
+            ok font_ok; RESULT[font]=ok
         else
-            warn font_fail
+            warn font_fail; RESULT[font]=fail
         fi
         rm -f "$FONT_TMP"
     fi
 else
-    warn font_fail
+    warn font_fail; RESULT[font]=fail
 fi
 
+# ── 4c. обои: демон awww/swww — установка, автозапуск, запуск ───────────
+install_wall() {
+    local c h=""
+    say wall_try
+    case "$PM" in
+        pacman)
+            if ! install_pkgs awww && ! install_pkgs swww; then
+                for c in yay paru; do command -v "$c" >/dev/null 2>&1 && { h="$c"; break; }; done
+                if [[ -n "$h" ]]; then say wall_aur "$h"; run "$h" -S --needed --noconfirm awww || true; fi
+            fi ;;
+        apt|dnf|zypper)
+            install_pkgs awww || install_pkgs swww || true ;;
+    esac
+}
+
+wall_lua_block()  { printf '\n-- .Tech wallpaper daemon\nhl.on("hyprland.start", function()\n  hl.exec_cmd("%s")\nend)\n' "$WALL_DAEMON"; }
+wall_conf_block() { printf '\n# .Tech wallpaper daemon\nexec-once = %s\n' "$WALL_DAEMON"; }
+
+wall_autostart() {
+    local other
+    if [[ -z "$TARGET" ]]; then
+        warn wall_auto_noconf
+        printf '%s' "$C_ACC"; wall_lua_block; wall_conf_block; printf '%s' "$C_RST"
+        return
+    fi
+    if wall_in_conf; then say wall_auto_has "$HYPR_DIR"; return; fi
+    other="$(conf_active | grep -oE 'hyprpaper|swaybg|wpaperd|mpvpaper' | head -n1)"
+    [[ -n "$other" ]] && warn wall_auto_other "$HYPR_DIR" "$other"
+    backup_conf "$TARGET"
+    if (( DRY_RUN )); then
+        printf '%s+ append to %s:%s\n' "$C_ACC" "$TARGET" "$C_RST"
+        if [[ $KIND == lua ]]; then wall_lua_block; else wall_conf_block; fi
+    else
+        if [[ $KIND == lua ]]; then wall_lua_block >> "$TARGET"; else wall_conf_block >> "$TARGET"; fi
+    fi
+    ok wall_auto_ok "$WALL_DAEMON" "${HYPR_BAK:-—}"
+}
+
+# поднять демон прямо сейчас, не дожидаясь перелогина
+start_wall_daemon() {
+    local i
+    if (( DRY_RUN )); then printf '%s+ setsid -f %s%s\n' "$C_ACC" "$WALL_DAEMON" "$C_RST"; return; fi
+    if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then warn wall_nosession; return; fi
+    if "$WALL_BIN" query >/dev/null 2>&1; then say wall_running; return; fi
+    setsid -f "$WALL_DAEMON" >/dev/null 2>&1
+    for i in 1 2 3 4 5 6; do
+        sleep 0.5
+        if "$WALL_BIN" query >/dev/null 2>&1; then ok wall_started; return; fi
+    done
+    warn wall_start_fail "$WALL_DAEMON"
+}
+
+setup_wall() {
+    if find_wall_bin; then
+        say wall_have "$WALL_BIN"
+    else
+        [[ -n "$PM" ]] && install_wall
+        find_wall_bin || true
+    fi
+    if [[ -z "$WALL_DAEMON" ]]; then
+        if (( DRY_RUN )); then WALL_BIN="awww"; WALL_DAEMON="awww-daemon"
+        else warn wall_fail; RESULT[wall]=fail; return; fi
+    fi
+    wall_autostart
+    start_wall_daemon
+    RESULT[wall]=ok
+}
+want wall && { stage wall; setup_wall; }
+
 # ── 5. репозиторий ─────────────────────────────────────────────────────
-echo
 # Всегда ставим в $INSTALL_DIR (~/.tech/shell), независимо от того, откуда запущен скрипт.
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     ROOT="$INSTALL_DIR"   # версия уже проверена в шаге 2b
 else
     ROOT="$INSTALL_DIR"
+    stage repo
     if [[ -e "$INSTALL_DIR" && -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
         # папка занята чем-то посторонним (например, старой установкой в ~/.tech/shell)
         warn repo_notgit "$INSTALL_DIR"
@@ -750,54 +928,50 @@ build_shaders() {
 say shaders_build
 mapfile -t SHADERS < <(find "$ROOT" -type f \( -name '*.frag' -o -name '*.vert' \) -not -path '*/.git/*' 2>/dev/null)
 if (( ${#SHADERS[@]} == 0 )); then
-    say shaders_none
+    say shaders_none; RESULT[shaders]=ok
 elif ! find_qsb && (( ! DRY_RUN )); then
-    warn shaders_nosb
+    warn shaders_nosb; RESULT[shaders]=fail
 else
     built=0
     for f in "${SHADERS[@]}"; do
         if run "${QSB:-qsb}" --qt6 -o "$f.qsb" "$f"; then built=$((built + 1)); else say shaders_fail "$f"; fi
     done
     ok shaders_ok "$built"
+    if (( built == ${#SHADERS[@]} )); then RESULT[shaders]=ok; else RESULT[shaders]=fail; fi
 fi
 }
-echo
-want shaders && build_shaders
+want shaders && { stage shaders; build_shaders; }
 scan_used_commands
 
 # ── 7. ссылка для «quickshell -c tech» ─────────────────────────────────
-echo
 QS_CONF="$HOME/.config/quickshell/$CONF_NAME"
-if [[ -L "$QS_CONF" && "$(readlink -f "$QS_CONF")" == "$(readlink -f "$ROOT")" ]]; then
-    :
-elif [[ -L "$QS_CONF" && ! -e "$QS_CONF" ]] && want link; then
-    # битая ссылка (например, на старую папку) — пересоздаём
-    run ln -sfn "$ROOT" "$QS_CONF" && ok link_ok
-elif [[ -e "$QS_CONF" || -L "$QS_CONF" ]]; then
-    warn link_exists "$CONF_NAME"
-elif want link; then
-    run mkdir -p "$HOME/.config/quickshell"
-    run ln -s "$ROOT" "$QS_CONF" && ok link_ok
+if want link; then
+    stage link
+    if [[ -L "$QS_CONF" && ! -e "$QS_CONF" ]]; then
+        # битая ссылка (например, на старую папку) — пересоздаём
+        run ln -sfn "$ROOT" "$QS_CONF" && { ok link_ok; RESULT[link]=ok; }
+    elif [[ -e "$QS_CONF" || -L "$QS_CONF" ]]; then
+        warn link_exists "$CONF_NAME"; RESULT[link]=fail
+    else
+        run mkdir -p "$HOME/.config/quickshell"
+        run ln -s "$ROOT" "$QS_CONF" && { ok link_ok; RESULT[link]=ok; }
+    fi
 fi
 
 # ── 8. стартовые цвета (Logic.qml читает ~/.cache/quickshell/colors.json) ─
 COLORS="$HOME/.cache/quickshell/colors.json"
 if want colors && [[ ! -e "$COLORS" ]]; then
+    stage colors
     run mkdir -p "$(dirname "$COLORS")"
     if (( DRY_RUN )); then
         printf '%s+ write %s%s\n' "$C_ACC" "$COLORS" "$C_RST"
     else
         printf '{\n  "bg": "#181825",\n  "accent": "#a3cef1",\n  "text": "#e0e1dd",\n  "secondary": "#3d5a80"\n}\n' > "$COLORS"
     fi
-    say colors "$COLORS"
+    say colors "$COLORS"; RESULT[colors]=ok
 fi
 
 # ── 9. автозапуск в Hyprland (Lua с 0.55, hyprlang — для старых версий) ──
-echo
-HYPR_DIR="$HOME/.config/hypr"
-HLUA="$HYPR_DIR/hyprland.lua"
-HCONF="$HYPR_DIR/hyprland.conf"
-
 lua_block() {
     printf '\n-- .Tech shell\nhl.on("hyprland.start", function()\n  hl.exec_cmd("quickshell -p '"'"'%s'"'"'")\nend)\n' "$ROOT"
 }
@@ -806,38 +980,31 @@ conf_block() {
 }
 
 add_autostart() {   # add_autostart <файл> <lua|conf>
-    local file="$1" kind="$2" bak
-    bak="$file.bak-$(date +%Y%m%d-%H%M%S)"
-    run cp "$file" "$bak"
+    local file="$1" kind="$2"
+    backup_conf "$file"
     if (( DRY_RUN )); then
         printf '%s+ append to %s:%s\n' "$C_ACC" "$file" "$C_RST"
         if [[ $kind == lua ]]; then lua_block; else conf_block; fi
     else
         if [[ $kind == lua ]]; then lua_block >> "$file"; else conf_block >> "$file"; fi
     fi
-    ok auto_ok "$bak"
+    ok auto_ok "${HYPR_BAK:-—}"
 }
 
-if [[ -f "$HLUA" ]]; then
-    TARGET="$HLUA"; KIND="lua"
-elif [[ -f "$HCONF" ]]; then
-    TARGET="$HCONF"; KIND="conf"
-    say auto_legacy
-else
-    TARGET=""; KIND=""
-fi
-
-if ! want auto; then
-    :
-elif [[ -z "$TARGET" ]]; then
-    warn auto_noconf
-    printf '%s' "$C_ACC"; lua_block; printf '%s' "$C_RST"
-    warn auto_noconf_old
-    printf '%s' "$C_ACC"; conf_block; printf '%s' "$C_RST"
-elif grep -v '^[[:space:]]*\(--\|#\)' "$TARGET" | grep -q 'quickshell'; then
-    say auto_has "$TARGET"
-else
-    add_autostart "$TARGET" "$KIND"
+if want auto; then
+    stage auto
+    [[ "$KIND" == conf ]] && say auto_legacy
+    if [[ -z "$TARGET" ]]; then
+        warn auto_noconf
+        printf '%s' "$C_ACC"; lua_block; printf '%s' "$C_RST"
+        warn auto_noconf_old
+        printf '%s' "$C_ACC"; conf_block; printf '%s' "$C_RST"
+        RESULT[auto]=fail
+    elif grep -v '^[[:space:]]*\(--\|#\)' "$TARGET" | grep -q 'quickshell'; then
+        say auto_has "$TARGET"; RESULT[auto]=ok
+    else
+        add_autostart "$TARGET" "$KIND"; RESULT[auto]=ok
+    fi
 fi
 
 # ── 9b. автопроверка обновлений (настройка шелла: ~/.cache/qs-updater/state.json) ──
@@ -873,7 +1040,7 @@ PYJSON
 fi
 
 # ── 10. запуск прямо сейчас ────────────────────────────────────────────
-echo
+want launch && stage launch
 if ! want launch; then
     :
 elif ! command -v quickshell >/dev/null 2>&1 && (( ! DRY_RUN )); then
@@ -892,11 +1059,30 @@ else
         fi
     fi
     if (( GO )); then
-        if run quickshell -d -p "$ROOT"; then ok launch_ok; else err launch_fail "$ROOT"; fi
+        if run quickshell -d -p "$ROOT"; then ok launch_ok; RESULT[launch]=ok; else err launch_fail "$ROOT"; RESULT[launch]=fail; fi
     fi
 fi
 
-# ── 11. финал ──────────────────────────────────────────────────────────
+# ── 11. итог и финал ───────────────────────────────────────────────────
+summary() {
+    local k lbl icon col txt
+    echo
+    printf '%s╭─ %s%s%s\n' "$C_ACC" "$C_B" "$(t sum_title)" "$C_RST"
+    for k in "${STEPS[@]}"; do
+        lbl="$(t "stg_$k")"
+        case "${RESULT[$k]:-}" in
+            ok)   icon="✓"; col="$C_OK";  txt="$(t sum_ok)" ;;
+            fail) icon="✗"; col="$C_ERR"; txt="$(t sum_fail)" ;;
+            *)
+                if [[ -n "${DONE[$k]:-}" ]]; then icon="✓"; col="$C_DIM"; txt="$(t sum_done)"
+                else icon="–"; col="$C_DIM"; txt="$(t sum_skip)"; fi ;;
+        esac
+        printf '%s│%s %s%s%s %s %s· %s%s\n' "$C_ACC" "$C_RST" "$col" "$icon" "$C_RST" "$lbl" "$col" "$txt" "$C_RST"
+    done
+    printf '%s╰─%s\n' "$C_ACC" "$C_RST"
+}
+summary
+
 echo
 printf '%s' "$C_B"; say next; printf '%s' "$C_RST"
 say next1 "$ROOT"
