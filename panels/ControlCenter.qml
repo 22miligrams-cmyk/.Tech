@@ -43,6 +43,7 @@ PanelWindow {
     property var settings: null          // SettingsMenu: оттуда берём doNotDisturb
     property var store: null             // Notify.qml: история уведомлений
     property var sink: null              // visualRoot.sinkAudio (громкость выхода)
+    property var lockTarget: null        // Lock.qml: экран блокировки (прямой вызов вместо IPC)
 
     property string side: "bottom"       // где бар: от этого зависит вертикальное положение панели
     property var anchorRect: ({ x: 0, y: 0, w: 0, h: 0, lo: 0, hi: 0 })
@@ -288,10 +289,16 @@ PanelWindow {
     property var pendingCmd: null
     property int afterCloseDelay: 250   // запас, чтобы композитор успел убрать поверхность (подними, если в кадр ещё попадает хвост)
 
+    // cmd - массив команды для actProc либо функция (прямой вызов, например lockTarget.lock())
+    function runCmd(cmd) {
+        if (typeof cmd === "function") { cmd(); return }
+        actProc.command = cmd
+        actProc.running = true
+    }
+
     function runAfterClose(cmd) {
         if (!visible) {
-            actProc.command = cmd
-            actProc.running = true
+            runCmd(cmd)
             return
         }
         pendingCmd = cmd
@@ -304,10 +311,7 @@ PanelWindow {
         onTriggered: {
             const c = cc.pendingCmd
             cc.pendingCmd = null
-            if (c) {
-                actProc.command = c
-                actProc.running = true
-            }
+            if (c) cc.runCmd(c)
         }
     }
 
@@ -1087,7 +1091,7 @@ PanelWindow {
                             iconName: "padlock"
                             iconSize: 24
                             fillColor: cc.colAccent
-                            onFired: cc.runAfterClose(["sh", "-c", "quickshell ipc -p ~/.tech/shell call lock lock"])
+                            onFired: cc.runAfterClose(function() { if (cc.lockTarget) cc.lockTarget.lock() })
                         }
 
                         HoldTile {

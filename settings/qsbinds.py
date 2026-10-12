@@ -21,6 +21,10 @@ import tempfile
 import glob
 from collections import Counter
 
+# общая атомарная запись (common/atomic_write.py), раскрывает симлинки
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "common"))
+from atomic_write import atomic_write
+
 # какой конфиг править: $QS_HYPR_CONF, иначе hyprland.lua (Hyprland 0.55+), иначе hyprland.conf (старые версии)
 def find_conf():
     env = os.environ.get("QS_HYPR_CONF")
@@ -313,20 +317,6 @@ def sourced_text(path, depth=0, seen=None):
                 continue
             out.append(sourced_text(rp, depth + 1, seen))
     return "\n".join(out)
-
-
-# записывает файл через временный файл и os.replace, чтобы при сбое не остался обрубок
-def atomic_write(path, text):
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-        shutil.copymode(path, tmp)
-        os.replace(tmp, path)
-    except Exception:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
 
 
 # точка входа: читает json из аргумента, переписывает блок в конфиге, делает reload,

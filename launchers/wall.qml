@@ -35,8 +35,21 @@ PanelWindow {
         readonly property string data: Quickshell.env("XDG_DATA_HOME") || (home + "/.local/share")
         readonly property string launchers: data + "/qs-launchers"
         readonly property string wallDirFile: launchers + "/wall-dir.txt"
-        readonly property string wallpapers: home + "/Изображения/wallpapers"
+        // «Изображения» спрашиваем у системы; до ответа - ~/Pictures (то же, что в common/Paths.qml)
+        property string pictures: home + "/Pictures"
+        readonly property string wallpapers: pictures + "/wallpapers"
         readonly property string icons: home + "/.tech/shell/icons"
+
+        property Process picturesProc: Process {
+            running: true
+            command: ["xdg-user-dir", "PICTURES"]
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const t = text.trim()
+                    if (t !== "" && t !== paths.home) paths.pictures = t
+                }
+            }
+        }
     }
     // ── Режим демона (как у laun.qml) ────────────────────────────────
     // Пока окно не показано: не рисуется, ничего не опрашивает, карточек и картинок нет
@@ -84,13 +97,15 @@ PanelWindow {
         wallScanProc.running = true
     }
 
-    // Применяет папку из настроек (пусто/нет файла -> папка по умолчанию) и пересканирует
+    // Применяет папку из настроек (пусто/нет файла -> папка по умолчанию).
+    // Сама пересканирует onWallpaperDirChanged, так что смена и ответ xdg-user-dir обрабатываются одинаково
     function applyWallDir(raw) {
-        let d = (raw || "").trim().replace(/\/+$/, "")
-        if (d === "") d = paths.wallpapers
-        if (d === wallpaperDir) return   // папка та же — скан уже идёт/прошёл
-        wallpaperDir = d
+        customDir = (raw || "").trim().replace(/\/+$/, "")
+    }
+
+    onWallpaperDirChanged: {
         rawWallpaperList = []            // старая папка — старые карточки не показываем
+        scanDone = false
         if (shown) rescan()
     }
 
@@ -137,7 +152,12 @@ PanelWindow {
     readonly property string colorScript: decodeURIComponent(Qt.resolvedUrl("colors.py").toString().replace(/^file:\/\//, ""))
 
     // папка с обоями: берётся из настроек (карточка «Папка обоев»), по умолчанию paths.wallpapers
-    property string wallpaperDir: paths.wallpapers
+    // customDir - то, что выбрано в настройках (пусто = не выбрано). Остальное считается биндингом,
+    // поэтому поздний ответ xdg-user-dir подхватывается сам, без гонки с чтением wall-dir.txt
+    property string customDir: ""
+    readonly property string wallpaperDir: customDir !== "" ? customDir : paths.wallpapers
+    property bool scanDone: false       // хотя бы один скан текущей папки завершился
+    property bool dirMissing: false     // find не смог открыть папку (её нет)
     property var rawWallpaperList: []
     property var scanBuf: []
     property var colorPalettes: ({})
@@ -428,6 +448,8 @@ PanelWindow {
         }
 
         onExited: (exitCode) => {
+            root.dirMissing = exitCode !== 0
+            root.scanDone = true
             let list = root.scanBuf.slice().sort((a, b) => a.name.localeCompare(b.name))
             let same = list.length === root.rawWallpaperList.length &&
                        list.every((it, i) => it.path === root.rawWallpaperList[i].path)
@@ -567,6 +589,19 @@ PanelWindow {
         }
     }
 
+
+    // Подсказка вместо пустой ленты: папки нет или в ней нет обоев
+    Text {
+        anchors.centerIn: parent
+        visible: root.shown && root.scanDone && root.rawWallpaperList.length === 0
+        horizontalAlignment: Text.AlignHCenter
+        color: Qt.rgba(1, 1, 1, 0.85)
+        font.pixelSize: 20
+        lineHeight: 1.3
+        text: (root.dirMissing ? "Папка с обоями не найдена" : "В папке с обоями нет картинок")
+              + "\n" + root.wallpaperDir
+              + "\n\nВыберите папку с обоями: Настройки → Лаунчеры → «Папка обоев»"
+    }
 
     // ============ Лента карточек ============
     Item {

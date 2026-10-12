@@ -7,8 +7,11 @@
 // Как юзать: Paths.home, Paths.cache, Paths.wallpapers ...
 pragma Singleton
 import Quickshell
+import Quickshell.Io
 
 Singleton {
+    id: root
+
     // домашняя папка пользователя
     readonly property string home: Quickshell.env("HOME")
 
@@ -24,8 +27,24 @@ Singleton {
     // сюда меню настроек пишет выбранную папку с обоями (просто путь одной строкой)
     readonly property string wallDirFile: launchers + "/wall-dir.txt"
 
+    // папка «Изображения»: спрашиваем у системы (xdg-user-dir), чтобы работало и с русской,
+    // и с английской локалью. Пока ответ не пришёл (или xdg-user-dir нет) - ~/Pictures
+    property string pictures: home + "/Pictures"
+
+    Process {
+        running: true
+        command: ["xdg-user-dir", "PICTURES"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const t = text.trim()
+                // xdg-user-dir возвращает $HOME, если каталог не настроен - тогда остаёмся на ~/Pictures
+                if (t !== "" && t !== root.home) root.pictures = t
+            }
+        }
+    }
+
     // папка с обоями по умолчанию (пока в настройках ничего не выбрано)
-    readonly property string wallpapers: home + "/Изображения/wallpapers"
+    readonly property string wallpapers: pictures + "/wallpapers"
 
     // svg-иконки шелла
     readonly property string icons: home + "/.tech/shell/icons"

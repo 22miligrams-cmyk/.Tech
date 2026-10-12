@@ -399,6 +399,7 @@ Item {
         screen: bar.screen
         settings: settingsMenuComp
         sink: visualRoot.sinkAudio
+        lockTarget: lockComp
         store: notify
         wallpaper: visualRoot.wallpaperPath
         blurEnabled: settingsMenuComp.blurEnabled

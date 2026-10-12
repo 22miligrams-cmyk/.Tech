@@ -31,9 +31,30 @@ import tempfile
 
 from PIL import Image
 
+# общая атомарная запись (common/atomic_write.py), раскрывает симлинки
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "common"))
+from atomic_write import atomic_write
+
 
 # ======================= НАСТРОЙКИ =======================
-WALLPAPER_DIR = os.environ.get("QS_WALLPAPERS", "/home/k2dein/Изображения/wallpapers")
+def _default_wallpaper_dir():
+    """~/<Изображения|Pictures>/wallpapers: папку «Изображения» берём у системы."""
+    home = os.path.expanduser("~")
+    pics = os.path.join(home, "Pictures")
+    try:
+        out = subprocess.run(["xdg-user-dir", "PICTURES"], capture_output=True,
+                             text=True, timeout=2).stdout.strip()
+        if out and out != home:
+            pics = out
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.path.join(pics, "wallpapers")
+
+
+# wall.qml передаёт выбранную в настройках папку через WALLPAPER_DIR; QS_WALLPAPERS оставлен для совместимости
+WALLPAPER_DIR = (os.environ.get("WALLPAPER_DIR")
+                 or os.environ.get("QS_WALLPAPERS")
+                 or _default_wallpaper_dir())
 CACHE_DIR = os.environ.get("QS_CACHE", os.path.expanduser("~/.cache/quickshell"))
 HYPRLAND_CONF = os.environ.get("QS_HYPR_CONF", os.path.expanduser("~/.config/hypr/hyprland.lua"))
 
@@ -286,22 +307,6 @@ def build_theme(palette, accent_hex):
 
 
 # ======================= ФАЙЛЫ =======================
-
-# Пишет файл атомарно: сначала во временный, потом подменяет целиком.
-# Так читатели (FileView в QML) никогда не увидят половину файла
-def atomic_write(path, text):
-    d = os.path.dirname(path) or "."
-    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-        if os.path.exists(path):
-            shutil.copymode(path, tmp)
-        os.replace(tmp, path)
-    except Exception:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
 
 
 # Читает кеш палитр. Если файла нет, он битый или версия алгоритма другая — начинаем с чистого
